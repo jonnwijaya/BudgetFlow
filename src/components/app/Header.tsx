@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { type CurrencyCode } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
@@ -151,8 +151,10 @@ export default function AppHeader({
             {user && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
-                  <SelectTrigger className="w-[70px] md:w-[100px] text-xs md:text-sm h-9 md:h-10">
-                    <SelectValue placeholder="Currency" />
+                  <SelectTrigger className="w-12 text-sm h-9 md:h-10 px-2">
+                    <SelectValue aria-label="Selected currency">
+                      {getCurrencySymbol(selectedCurrency)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {currencies.map(currency => (
