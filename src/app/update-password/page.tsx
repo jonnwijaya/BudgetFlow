@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, KeyRound, AlertTriangle } from 'lucide-react';
+import { Loader2, KeyRound } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Subscription } from '@supabase/supabase-js';
 
@@ -38,72 +38,8 @@ export default function UpdatePasswordPage() {
   const [isLoading, setIsLoading] = useState(false); // For form submission
   const [isRecoveryModeActive, setIsRecoveryModeActive] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [verifyingLink, setVerifyingLink] = useState(true); // True while checking URL token
-
-  // Main effect for handling auth state changes and link verification
-  useEffect(() => {
-    let isMounted = true;
-    let authSubscription: Subscription | undefined;
-    let timeoutId: NodeJS.Timeout | undefined;
-
-    if (!window.location.hash.includes('type=recovery') || !window.location.hash.includes('access_token')) {
-      if (isMounted) {
-        setAuthError("Invalid password reset link: Missing necessary parameters.");
-        setVerifyingLink(false);
-        setIsRecoveryModeActive(false);
-      }
-      return;
-    }
-
-    // Set verifyingLink to true explicitly at the start of verification attempt
-    setVerifyingLink(true); 
-    setIsRecoveryModeActive(false);
-    setAuthError(null);
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      authSubscription = subscription; // Assign here for cleanup
-      if (!isMounted) return;
-
-      if (event === 'PASSWORD_RECOVERY' && session) {
-        if (timeoutId) clearTimeout(timeoutId);
-        setIsRecoveryModeActive(true);
-        setAuthError(null);
-        setVerifyingLink(false);
-      } else if (verifyingLink && (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session))) {
-        // This means the token was likely invalid or already used, and Supabase couldn't establish a recovery session.
-        if (timeoutId) clearTimeout(timeoutId);
-        setAuthError("Password recovery link may be invalid, expired, or already used. Please request a new one if this issue persists.");
-        setIsRecoveryModeActive(false);
-        setVerifyingLink(false);
-      }
-    });
-
-    timeoutId = setTimeout(() => {
-      if (isMounted && verifyingLink && !isRecoveryModeActive) {
-        setAuthError("Password recovery verification timed out. The link may be invalid/expired or there could be a network issue. Please try again or request a new link.");
-        setIsRecoveryModeActive(false);
-        setVerifyingLink(false);
-      }
-    }, 15000); // 15 seconds timeout
-
-    return () => {
-      isMounted = false;
-      authSubscription?.unsubscribe();
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, []); // Empty dependency array ensures this runs once on mount
-
-  // Effect for handling redirection when verification fails
-  useEffect(() => {
-    if (!verifyingLink && !isRecoveryModeActive && authError) {
-      toast({
-        title: 'Update Password Issue',
-        description: authError,
-        variant: 'destructive',
-      });
-      router.replace('/login');
-    }
-  }, [verifyingLink, isRecoveryModeActive, authError, router, toast]);
+  const [verifyingLink, setVerifyingLink] = useState(true);
+  const [passwordUpdateSuccess, setPasswordUpdateSuccess] = useState(false);
 
   const form = useForm<UpdatePasswordFormValues>({
     resolver: zodResolver(updatePasswordSchema),
@@ -113,9 +49,73 @@ export default function UpdatePasswordPage() {
     },
   });
 
+  useEffect(() => {
+    let isMounted = true;
+    let authSub: Subscription | undefined;
+    let verificationTimeoutId: NodeJS.Timeout | undefined;
+
+    setVerifyingLink(true);
+    setIsRecoveryModeActive(false);
+    setAuthError(null);
+    setPasswordUpdateSuccess(false);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted || passwordUpdateSuccess) { // Ignore auth changes if update was successful
+        authSub?.unsubscribe(); // Ensure we unsubscribe if already successful
+        return;
+      }
+      authSub = subscription;
+
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        if (verificationTimeoutId) clearTimeout(verificationTimeoutId);
+        if (isMounted) {
+          setVerifyingLink(false);
+          setIsRecoveryModeActive(true);
+          setAuthError(null);
+        }
+      } else if (verifyingLink && (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session))) {
+        if (verificationTimeoutId) clearTimeout(verificationTimeoutId);
+        if (isMounted) {
+          setAuthError("Password recovery link may be invalid, expired, or already used. Please request a new one if this issue persists.");
+          setVerifyingLink(false);
+          setIsRecoveryModeActive(false);
+        }
+      }
+    });
+    authSub = subscription; // Keep a reference to unsubscribe
+
+    verificationTimeoutId = setTimeout(() => {
+      if (isMounted && verifyingLink && !isRecoveryModeActive && !passwordUpdateSuccess) {
+        if (isMounted) {
+          setAuthError("Password recovery verification timed out. The link may be invalid/expired or there could be a network issue. Please try again or request a new link.");
+          setVerifyingLink(false);
+          setIsRecoveryModeActive(false);
+        }
+      }
+    }, 15000);
+
+    return () => {
+      isMounted = false;
+      authSub?.unsubscribe();
+      if (verificationTimeoutId) clearTimeout(verificationTimeoutId);
+    };
+  }, []); // passwordUpdateSuccess removed from deps intentionally for this effect
+
+  useEffect(() => {
+    // This effect handles redirection if link verification fails (and not due to successful update)
+    if (!verifyingLink && !isRecoveryModeActive && authError && !passwordUpdateSuccess) {
+      toast({
+        title: 'Update Password Issue',
+        description: authError,
+        variant: 'destructive',
+      });
+      router.replace('/login');
+    }
+  }, [verifyingLink, isRecoveryModeActive, authError, passwordUpdateSuccess, router, toast]);
+
+
   const onSubmit = async (data: UpdatePasswordFormValues) => {
     if (!isRecoveryModeActive) {
-      // This case should ideally not be reachable if UI is driven by isRecoveryModeActive
       setAuthError("Cannot update password. No active recovery session. Please use a valid reset link.");
       toast({
         title: 'Update Failed',
@@ -125,7 +125,7 @@ export default function UpdatePasswordPage() {
       return;
     }
     setIsLoading(true);
-    setAuthError(null); // Clear previous form submission errors
+    setAuthError(null); // Clear previous errors before submission
     try {
       const { error } = await supabase.auth.updateUser({
         password: data.password,
@@ -135,34 +135,50 @@ export default function UpdatePasswordPage() {
         throw error;
       }
       
+      setPasswordUpdateSuccess(true); // Signal successful update
       toast({
         title: 'Password Updated',
         description: 'Your password has been successfully updated. Please log in with your new password.',
       });
+      
+      // Intentionally sign out. The onAuthStateChange listener should now ignore further events.
       await supabase.auth.signOut(); 
       router.push('/login');
+
     } catch (error: any) {
-      // This authError is for password update failure, not link verification failure
+      // Only set authError if the update itself failed, not if a later step (like signOut) failed
       setAuthError(error.message || 'Could not update password. Please try again.');
       toast({
         title: 'Password Update Failed',
         description: error.message || 'Could not update password. Please try again.',
         variant: 'destructive',
       });
+      setPasswordUpdateSuccess(false); // Ensure success flag is false
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (verifyingLink) {
+  
+  if (verifyingLink && !passwordUpdateSuccess) {
     return (
      <div className="flex min-h-screen items-center justify-center bg-background">
        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-       <p className="ml-4 text-muted-foreground">Verifying link...</p>
+       <p className="ml-4 text-muted-foreground">Verifying password reset link...</p>
      </div>
    );
   }
 
+  // If password update was successful, show a message while redirecting (router.push is async)
+  if (passwordUpdateSuccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-muted-foreground">Password updated successfully! Redirecting to login...</p>
+      </div>
+    );
+  }
+
+  // If recovery mode is active, and verification is done, and no successful update yet
   if (isRecoveryModeActive) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -175,7 +191,7 @@ export default function UpdatePasswordPage() {
             <CardDescription>Please enter your new password below.</CardDescription>
           </CardHeader>
           <CardContent>
-            {authError && !verifyingLink && ( // Show form submission errors here
+            {authError && !verifyingLink && !passwordUpdateSuccess && ( // Show submission errors here
               <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm text-destructive">
                   <p>{authError}</p>
               </div>
@@ -234,13 +250,13 @@ export default function UpdatePasswordPage() {
     );
   }
 
-  // If verifyingLink is false AND isRecoveryModeActive is false,
-  // it means verification failed. The redirect useEffect should handle navigation.
+  // Fallback: If !verifyingLink AND !isRecoveryModeActive AND !passwordUpdateSuccess,
+  // means verification failed. The redirect useEffect should handle navigation.
   // Show a generic message while redirecting.
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <Loader2 className="h-12 w-12 animate-spin text-destructive" />
-      <p className="ml-4 text-muted-foreground">Processing error...</p>
+      <p className="ml-4 text-muted-foreground">Processing... If you are not redirected shortly, the link may be invalid.</p>
     </div>
   );
 }
