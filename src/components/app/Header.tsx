@@ -67,11 +67,12 @@ export default function AppHeader({
         variant: 'destructive',
       });
     } else {
+      // Even if "Auth session missing!", we treat it as success for UI
       toast({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
-      router.replace('/login');
+      router.replace('/login'); 
     }
     setIsLoggingOut(false);
   };
@@ -87,43 +88,54 @@ export default function AppHeader({
     }
     setIsDeletingAccount(true);
     try {
-      // Call the Supabase Edge Function
-      const { data, error: functionError } = await supabase.functions.invoke('delete-user-account');
+      // Step 1: Delete expenses associated with the user
+      const { error: expensesError } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('user_id', user.id);
 
-      if (functionError) {
-        console.error("Edge function error:", functionError);
-        throw functionError; // This will be caught by the catch block
+      if (expensesError) {
+        console.error("Error deleting user's expenses:", expensesError);
+        throw new Error(`Failed to delete expenses: ${expensesError.message}`);
       }
+      console.log("User's expenses deleted.");
 
-      if (data?.error) {
-        console.error("Error from edge function data:", data.error);
-        throw new Error(data.error);
+      // Step 2: Delete profile associated with the user
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+      
+      if (profileError) {
+        console.error("Error deleting user's profile:", profileError);
+        throw new Error(`Failed to delete profile: ${profileError.message}`);
       }
-
-      console.log("Edge function success data:", data);
-
-      // Even if the function call succeeds, we still need to sign out the client
+      console.log("User's profile deleted.");
+      
+      // Step 3: Sign the user out
       const { error: signOutError } = await supabase.auth.signOut();
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
+        // If sign out itself fails with an unexpected error
         toast({
-          title: "Logout Failed During Account Deletion",
-          description: signOutError.message,
+          title: "Data Deleted, Logout Issue",
+          description: `Your data was deleted, but sign out failed: ${signOutError.message}. Please try logging out manually.`,
           variant: "destructive",
         });
-        // Don't redirect yet if logout itself failed unexpectedly
       } else {
         toast({
-          title: "Account Deletion Successful",
-          description: "Your account has been deleted. Redirecting...",
+          title: "Account Data Cleared",
+          description: "Your application data has been cleared. You have been signed out. Note: Your authentication record still exists.",
           variant: "default",
         });
+        console.warn("User data (expenses, profile) deleted from client-side. Auth record NOT deleted. For full account deletion, implement a Supabase Edge Function.");
         router.replace('/register'); // Or '/login'
       }
+
     } catch (e: any) {
       toast({
-        title: "Error During Account Deletion",
-        description: e.message || "An unexpected error occurred. Please try again or contact support.",
+        title: "Error During Data Deletion",
+        description: e.message || "An unexpected error occurred while trying to clear your data.",
         variant: "destructive",
       });
     } finally {
@@ -205,7 +217,7 @@ export default function AppHeader({
                     disabled={isDeletingAccount}
                   >
                     {isDeletingAccount ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                    Delete Account
+                    Delete Account Data
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
                     {isLoggingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
