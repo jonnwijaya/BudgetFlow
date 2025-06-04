@@ -27,11 +27,11 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true); // New state for initial auth check
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const checkSessionAndDeactivation = useCallback(async (currentSession: Session | null, showDeactivatedToast = true) => {
     if (currentSession) {
-      setIsLoading(true); // Use main isLoading for this check as well
+      setIsLoading(true); 
       try {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -39,18 +39,17 @@ export default function LoginPage() {
           .eq('id', currentSession.user.id)
           .single();
 
-        if (profileError && profileError.code !== 'PGRST116') { // PGRST116: 0 rows, treat as not deactivated
+        if (profileError && profileError.code !== 'PGRST116') { 
           console.error('Error fetching profile for deactivation check:', profileError);
-          // If profile fetch fails, err on side of caution and sign out
           await supabase.auth.signOut();
-          if (showDeactivatedToast) { // Avoid double toast if called from onSubmit
+          if (showDeactivatedToast) { 
             toast({
               title: 'Error',
               description: 'Could not verify account status. Please try logging in again.',
               variant: 'destructive',
             });
           }
-          return false; // Indicate login should not proceed
+          return false; 
         }
 
         if (profile?.is_deactivated) {
@@ -62,14 +61,13 @@ export default function LoginPage() {
               variant: 'destructive',
             });
           }
-          return false; // Indicate login should not proceed
+          return false; 
         }
-        // Profile exists and is not deactivated
         router.replace('/'); 
-        return true; // Indicate login can proceed (though already redirected)
+        return true; 
       } catch (e: any) {
         console.error("Unexpected error checking deactivation status:", e);
-        await supabase.auth.signOut(); // Sign out on unexpected error
+        await supabase.auth.signOut(); 
         if (showDeactivatedToast) {
           toast({
             title: 'Login Error',
@@ -77,13 +75,13 @@ export default function LoginPage() {
             variant: 'destructive',
           });
         }
-        return false; // Indicate login should not proceed
+        return false; 
       } finally {
         setIsLoading(false);
       }
     }
-    setIsCheckingAuth(false); // No session, finish initial auth check
-    return true; // No session, so login can proceed if user attempts
+    // Removed setIsCheckingAuth(false) from here; it's handled by the useEffect caller.
+    return true; 
   }, [router, toast]);
 
 
@@ -94,7 +92,7 @@ export default function LoginPage() {
     setIsCheckingAuth(true);
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!isMounted) return;
-      await checkSessionAndDeactivation(initialSession, false); // Check initial session, suppress toast if already logged in & fine
+      await checkSessionAndDeactivation(initialSession, false); 
       if (isMounted) setIsCheckingAuth(false);
     }).catch(e => {
       if (isMounted) {
@@ -108,11 +106,8 @@ export default function LoginPage() {
       authSubscription = subscription;
       
       if (event === 'SIGNED_IN' && session) {
-        // This will be triggered after successful supabase.auth.signInWithPassword
-        // The checkSessionAndDeactivation will handle redirect or sign out
         await checkSessionAndDeactivation(session);
       }
-      // If SIGNED_OUT, user should remain on login page (or be redirected here by page.tsx if they were elsewhere)
     });
 
     return () => {
@@ -132,7 +127,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      const { error, data: signInData } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
@@ -141,14 +136,10 @@ export default function LoginPage() {
         throw error;
       }
       
-      // If signInWithPassword is successful, onAuthStateChange SIGNED_IN event will fire.
-      // The checkSessionAndDeactivation function will then determine if the user is deactivated.
-      // We don't need to call it explicitly here again.
       toast({
         title: 'Login Attempted',
-        description: 'Verifying account status...', // This toast might be quickly replaced by deactivation toast or success
+        description: 'Verifying account status...', 
       });
-      // No explicit router.push/replace here, onAuthStateChange listener handles it after deactivation check
     } catch (error: any) {
       toast({
         title: 'Login Failed',
