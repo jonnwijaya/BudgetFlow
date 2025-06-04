@@ -45,9 +45,15 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
     try {
+      // Construct the redirect URL for email confirmation
+      const emailRedirectTo = `${window.location.origin}/login`;
+
       const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
+        options: {
+          emailRedirectTo: emailRedirectTo,
+        },
       });
 
       if (error) {
@@ -56,9 +62,10 @@ export default function RegisterPage() {
 
       toast({
         title: 'Registration Successful!',
-        description: 'Please check your email to confirm your account.',
+        description: 'Please check your email to confirm your account. You will be redirected to login after confirmation.',
       });
-      router.push('/login');
+      // No need to push to login here, user needs to confirm email first
+      // router.push('/login'); 
     } catch (error: any) {
       toast({
         title: 'Registration Failed',
