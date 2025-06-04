@@ -38,64 +38,70 @@ export default function UpdatePasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRecoveryModeActive, setIsRecoveryModeActive] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [verifyingLink, setVerifyingLink] = useState(true); // New state
+  const [verifyingLink, setVerifyingLink] = useState(true);
 
   useEffect(() => {
     let authSubscription: Subscription | undefined;
-    let recoveryLinkProcessed = false;
 
-    // Initial check: If there's no hash for recovery, the link is likely invalid for this page.
-    if (!window.location.hash.includes('type=recovery') && !window.location.hash.includes('access_token')) {
-        setAuthError("Invalid or expired password reset link. Please request a new one.");
+    // Check for recovery parameters in URL hash
+    // Supabase password recovery links include #access_token=...&type=recovery...
+    if (!window.location.hash.includes('type=recovery') || !window.location.hash.includes('access_token')) {
+        setAuthError("Invalid password reset link: Missing necessary parameters.");
         setVerifyingLink(false);
-        setIsRecoveryModeActive(false); // Ensure not in recovery mode
-    } else {
-        // Hash is present, proceed with auth state change listener
-        setVerifyingLink(true); // We are expecting onAuthStateChange
+        setIsRecoveryModeActive(false);
+        return; // Exit early
     }
 
+    // Start in verifying state if hash seems plausible
+    setVerifyingLink(true);
+    setIsRecoveryModeActive(false); // Ensure this is false initially
+    setAuthError(null); // Clear previous errors
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       authSubscription = subscription;
-      recoveryLinkProcessed = true; // Mark that onAuthStateChange has fired
-      setVerifyingLink(false); // No longer verifying once an event comes through
 
       if (event === 'PASSWORD_RECOVERY' && session) {
         setIsRecoveryModeActive(true);
         setAuthError(null);
-      } else if (event === 'SIGNED_IN' && session && !session.user.user_metadata.is_password_recovery) {
-        // User is signed in, but not via password recovery. Redirect them.
-        // router.push('/'); // Or show a message that this page is for recovery only
-      } else if (event !== 'PASSWORD_RECOVERY') {
-        // If it's not a PASSWORD_RECOVERY event (e.g. SIGNED_OUT or initial state without session)
-        // and we were not already set to recovery mode by the event itself.
-        if (!isRecoveryModeActive) { // Check if we are ALREADY in recovery mode
-            setAuthError("No active password recovery session. This link may be invalid, expired, or already used.");
-            setIsRecoveryModeActive(false);
+        setVerifyingLink(false); // Successfully entered recovery mode
+      } else if (verifyingLink) {
+        // If still verifying and we get an event that's NOT PASSWORD_RECOVERY.
+        // This could mean the token was invalid or already processed.
+        // Supabase might emit SIGNED_OUT or INITIAL_SESSION (with no session) if the token fails.
+        if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
+          setAuthError("Password recovery link may be invalid, expired, or already used. Please request a new one.");
+          setIsRecoveryModeActive(false);
+          setVerifyingLink(false);
         }
+        // Other events like INITIAL_SESSION (with session) or TOKEN_REFRESHED while still `verifyingLink`
+        // are unusual here. We let the timeout handle prolonged verification.
+      } else if (!isRecoveryModeActive && event !== 'PASSWORD_RECOVERY') {
+        // If we are no longer verifying (verifyingLink is false, possibly due to an earlier event or timeout)
+        // AND we are not in recovery mode, AND this event is not PASSWORD_RECOVERY,
+        // then it's an error state. This handles cases where an initial, non-decisive event
+        // might have set verifyingLink to false, but we never achieved recovery mode.
+        setAuthError("No active password recovery session. Ensure you're using a valid link from your email.");
+        setIsRecoveryModeActive(false);
       }
+      // If isRecoveryModeActive is true, other events generally shouldn't change this state here,
+      // as the primary action is now the form submission.
     });
-    
-    // Fallback if onAuthStateChange doesn't fire quickly or at all with a recovery hash
-    // This might happen in rare cases or if the token in the hash is already invalid.
+
+    // Fallback timeout if onAuthStateChange doesn't lead to a clear resolution (recovery mode or error)
     const timeoutId = setTimeout(() => {
-        if (window.location.hash.includes('type=recovery') && !recoveryLinkProcessed && !isRecoveryModeActive) {
-            // If hash is present, but onAuthStateChange didn't set recovery mode
-            setVerifyingLink(false);
-            setAuthError("Failed to verify password reset link. It might be invalid or expired.");
+        if (verifyingLink && !isRecoveryModeActive) {
+            // If still verifying after timeout AND not in recovery mode, assume failure.
+            setAuthError("Password recovery verification timed out. The link may be invalid/expired or there could be a network issue. Please try again.");
             setIsRecoveryModeActive(false);
-        } else if (!window.location.hash.includes('type=recovery') && !recoveryLinkProcessed && !isRecoveryModeActive) {
-            // No hash and no event from onAuthStateChange
             setVerifyingLink(false);
-            // Error already set by initial check, or will be by onAuthStateChange
         }
-    }, 2500); // Wait for 2.5 seconds
+    }, 7000); // 7 seconds timeout
 
     return () => {
       authSubscription?.unsubscribe();
       clearTimeout(timeoutId);
     };
-  }, [router]); // Removed isRecoveryModeActive from dependencies
+  }, []); // Empty dependency array ensures this runs once on mount and cleans up on unmount
 
 
   const form = useForm<UpdatePasswordFormValues>({
@@ -154,7 +160,8 @@ export default function UpdatePasswordPage() {
    );
   }
 
-  if (authError && !isRecoveryModeActive) {
+  // If no longer verifying, check for errors or if recovery mode is active
+  if (authError && !isRecoveryModeActive) { // Prioritize showing authError if not in recovery mode
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md shadow-xl">
@@ -181,8 +188,8 @@ export default function UpdatePasswordPage() {
   }
   
   if (!isRecoveryModeActive) {
-     // This case should ideally be covered by the authError block above after verifyingLink is false.
-     // If somehow reached, it implies an invalid state.
+     // This case is reached if verifyingLink is false, isRecoveryModeActive is false, AND authError is null.
+     // This should be less common with the refined error handling but acts as a fallback.
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md shadow-xl">
@@ -193,7 +200,7 @@ export default function UpdatePasswordPage() {
             <CardTitle className="text-3xl font-headline">Access Denied</CardTitle>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-muted-foreground">This page is for password recovery only. Please use a valid link from your email.</p>
+            <p className="text-muted-foreground">This page is for password recovery only. Please ensure you have a valid link from your email.</p>
           </CardContent>
           <CardFooter className="flex flex-col items-center pt-6">
             <Link href="/login" passHref legacyBehavior>
@@ -205,7 +212,7 @@ export default function UpdatePasswordPage() {
     );
   }
 
-
+  // If verifyingLink is false, and isRecoveryModeActive is true (authError might exist from submit but form is still shown)
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -217,7 +224,7 @@ export default function UpdatePasswordPage() {
           <CardDescription>Please enter your new password below.</CardDescription>
         </CardHeader>
         <CardContent>
-          {authError && ( // Show non-critical auth errors here if recovery mode IS active
+          {authError && ( // Show non-critical auth errors here (e.g., from a previous submission attempt)
             <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm text-destructive">
                 <p>{authError}</p>
             </div>
@@ -275,5 +282,4 @@ export default function UpdatePasswordPage() {
     </div>
   );
 }
-
     
