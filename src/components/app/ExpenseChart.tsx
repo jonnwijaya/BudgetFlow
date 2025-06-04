@@ -44,7 +44,7 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
     return (
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="font-headline">Expense Breakdown</CardTitle>
+          <CardTitle className="font-headline"><h2>Expense Breakdown</h2></CardTitle>
           <CardDescription>No data for the selected period.</CardDescription>
         </CardHeader>
         <CardContent className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
@@ -58,7 +58,7 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
   return (
     <Card className="shadow-lg">
       <CardHeader>
-        <CardTitle className="font-headline">Expense Breakdown</CardTitle>
+        <CardTitle className="font-headline"><h2>Expense Breakdown</h2></CardTitle>
         <CardDescription>Spending distribution by category for the selected period.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -69,11 +69,12 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={70} // Adjusted radius
-              innerRadius={35} // Make it a donut chart for better visuals
+              outerRadius={70}
+              innerRadius={35}
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
+              aria-label="Expense distribution pie chart"
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke={COLORS[index % COLORS.length]} />
