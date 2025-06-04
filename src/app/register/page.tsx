@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -43,16 +44,30 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
-    console.log('Registration data:', data);
-    // Simulate API call for registration
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast({
-      title: 'Registration Successful!',
-      description: 'Your account has been created. Please log in.',
-    });
-    router.push('/login');
-    setIsLoading(false);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Registration Successful!',
+        description: 'Please check your email to confirm your account.',
+      });
+      router.push('/login');
+    } catch (error: any) {
+      toast({
+        title: 'Registration Failed',
+        description: error.message || 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

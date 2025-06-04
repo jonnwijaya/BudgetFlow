@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
 import AddExpenseSheet from '@/components/app/AddExpenseSheet';
@@ -12,14 +13,19 @@ import SetThresholdDialog from '@/components/app/SetThresholdDialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, BarChart3, CalendarDays } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarDays, Loader2 } from 'lucide-react';
 import { type Expense, type FinancialTip, type CurrencyCode, SUPPORTED_CURRENCIES } from '@/types';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { format } from 'date-fns';
+import { supabase } from '@/lib/supabaseClient';
+import type { User } from '@supabase/supabase-js';
 
 export default function BudgetFlowPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
@@ -31,10 +37,42 @@ export default function BudgetFlowPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Error getting session:', error);
+        router.push('/login');
+        return;
+      }
+      if (!session) {
+        router.push('/login');
+      } else {
+        setUser(session.user);
+      }
+      setIsLoadingAuth(false);
+    };
+    checkSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
+        router.push('/login');
+      } else if (session) {
+        setUser(session.user);
+      }
+    });
+
+    return () => {
+      authListener?.unsubscribe();
+    };
+  }, [router]);
+
+
   const availableYears = useMemo(() => {
     const yearsFromExpenses = new Set(expenses.map(exp => new Date(exp.date).getFullYear()));
     const currentYear = new Date().getFullYear();
-    yearsFromExpenses.add(currentYear); // Ensure current year is always an option
+    yearsFromExpenses.add(currentYear);
     return Array.from(yearsFromExpenses).sort((a, b) => b - a);
   }, [expenses]);
 
@@ -49,6 +87,7 @@ export default function BudgetFlowPage() {
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
 
   const fetchNewTip = useCallback(async () => {
+    if (!user) return; 
     setIsLoadingTip(true);
     try {
       const tipInput = {
@@ -69,11 +108,13 @@ export default function BudgetFlowPage() {
     } finally {
       setIsLoadingTip(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchNewTip();
-  }, [fetchNewTip]);
+    if (user) {
+      fetchNewTip();
+    }
+  }, [fetchNewTip, user]);
 
   const handleSaveExpense = (newExpenseData: Omit<Expense, 'id'>) => {
     const newExpense: Expense = {
@@ -124,10 +165,19 @@ export default function BudgetFlowPage() {
     setSelectedCurrency(newCurrency);
     toast({ title: "Currency Updated", description: `Currency changed to ${newCurrency}.`})
   };
+
+  if (isLoadingAuth || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
   
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <AppHeader 
+        user={user}
         onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)} 
         totalSpent={totalSpent}
         budgetThreshold={budgetThreshold}
