@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wallet, PlusCircle, LogOut, UserCircle, Loader2 } from 'lucide-react';
+import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 interface HeaderProps {
   user: User | null; // Pass user directly
@@ -66,7 +67,7 @@ export default function AppHeader({
         description: 'You have been successfully logged out.',
       });
       router.push('/login');
-      router.refresh(); // Ensure page reloads and auth state is cleared
+      // router.refresh(); // Removed to potentially speed up logout navigation
     }
     setIsLoggingOut(false);
   };
