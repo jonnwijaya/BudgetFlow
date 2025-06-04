@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
-import type { User } from '@supabase/supabase-js';
+import type { User, Subscription } from '@supabase/supabase-js';
 
 export default function BudgetFlowPage() {
   const router = useRouter();
@@ -39,6 +39,7 @@ export default function BudgetFlowPage() {
 
   useEffect(() => {
     let isMounted = true;
+    let authSubscription: Subscription | undefined;
 
     const checkSession = async () => {
       try {
@@ -75,7 +76,7 @@ export default function BudgetFlowPage() {
 
     checkSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (!isMounted) return;
       
       if (event === 'SIGNED_OUT' || !currentSession) {
@@ -85,10 +86,11 @@ export default function BudgetFlowPage() {
         setUser(currentSession.user);
       }
     });
+    authSubscription = subscription;
 
     return () => {
       isMounted = false;
-      authListener?.unsubscribe();
+      authSubscription?.unsubscribe();
     };
   }, [router]);
 
