@@ -162,18 +162,27 @@ export default function AppHeader({
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="text-right hidden sm:block"> {/* Hide on extra small screens */}
-                  <p className="text-xs md:text-sm text-muted-foreground">Total Spent</p>
-                  <p className="text-sm md:text-base font-semibold">{formatCurrency(totalSpent, selectedCurrency)}</p>
+                
+                <div className="text-center sm:text-right">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="hidden sm:inline">Total </span>Spent
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {formatCurrency(totalSpent, selectedCurrency)}
+                  </p>
                 </div>
+
                 {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
-                  <div className="text-right hidden md:block"> {/* Hide on small screens */}
-                    <p className="text-xs md:text-sm text-muted-foreground">Budget Rem.</p>
-                    <p className={`text-sm md:text-base font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
+                  <div className="text-center sm:text-right">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="hidden sm:inline">Budget </span>Rem.
+                    </p>
+                    <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
                   </div>
                 )}
+
                 <Button
                   onClick={onAddExpenseClick}
                   variant="default"
@@ -235,4 +244,3 @@ export default function AppHeader({
     </>
   );
 }
-
