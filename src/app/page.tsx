@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
@@ -20,77 +20,69 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
-import type { User, Subscription } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 
 export default function BudgetFlowPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingData, setIsLoadingData] = useState(true); 
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
-  
+
   const [budgetThreshold, setBudgetThreshold] = useState<number | null>(null);
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD'); 
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
 
   const { toast } = useToast();
 
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
+  // Effect for handling authentication state
   useEffect(() => {
     let isMounted = true;
-    let authSubscription: Subscription | undefined;
+    setIsLoadingAuth(true);
 
-    const checkSessionAndSetupListener = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (!isMounted) return;
-
-        if (error) {
-          console.error('Error getting session:', error);
-          if (isMounted) router.push('/login');
-          return;
-        }
-
-        if (!session) {
-          if (isMounted) router.push('/login');
-        } else {
-          if (isMounted) setUser(session.user);
-        }
-      } catch (e) {
-        console.error("Unexpected error during session check:", e);
-        if (isMounted) router.push('/login');
-      } finally {
-        if (isMounted) setIsLoadingAuth(false);
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (isMounted) {
+        setUser(initialSession?.user ?? null);
+        // Defer setIsLoadingAuth(false) to the listener for INITIAL_SESSION
       }
+    }).catch(error => {
+        if(isMounted) {
+            console.error("Error fetching initial session:", error);
+            setIsLoadingAuth(false);
+        }
+    });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-        if (!isMounted) return;
-        authSubscription = subscription; 
-        if (event === 'SIGNED_OUT' || !currentSession) {
-          setUser(null);
-          router.push('/login');
-        } else if (currentSession) {
-          if (!user || user.id !== currentSession.user.id) {
-             setUser(currentSession.user);
-          } else if (user && JSON.stringify(user) !== JSON.stringify(currentSession.user)) {
-             setUser(currentSession.user);
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (isMounted) {
+          setUser(session?.user ?? null);
+          if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_DELETED") {
+            setIsLoadingAuth(false);
           }
         }
-      });
-    };
-
-    checkSessionAndSetupListener();
+      }
+    );
 
     return () => {
       isMounted = false;
-      authSubscription?.unsubscribe();
+      authListener?.subscription.unsubscribe();
     };
-  }, [router, user]); // Added user to dependency array to ensure re-check if user object changes from other sources, though primary updates come from within.
+  }, []); // Run only on mount
+
+  // Effect for redirecting if not authenticated
+  useEffect(() => {
+    if (!isLoadingAuth && !user) {
+      router.push('/login');
+    }
+  }, [isLoadingAuth, user, router]);
+
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -101,24 +93,20 @@ export default function BudgetFlowPage() {
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') { // PGRST116: No rows found by .single()
-          console.log(`No profile found for user ${userId}, setting defaults. This is normal if it's a new user or profile was not created by trigger.`);
+        if (error.code === 'PGRST116') {
+          console.log(`No profile found for user ${userId}, will use/create defaults.`);
           setBudgetThreshold(null);
           setSelectedCurrency('USD');
         } else {
           console.error('Error fetching profile:', error);
           toast({ title: 'Profile Load Error', description: `Could not load your profile: ${error.message}`, variant: 'destructive' });
-          setBudgetThreshold(null); // Reset on other errors
+          setBudgetThreshold(null);
           setSelectedCurrency('USD');
         }
       } else if (data) {
         setBudgetThreshold(data.budget_threshold);
         setSelectedCurrency((data.selected_currency as CurrencyCode) || 'USD');
-        // is_deactivated is handled by login page
       } else {
-        // This case (data is null, error is null) should ideally not be reached if .single() is used
-        // and error handling for PGRST116 is done. But as a fallback:
-        console.log(`Profile data is null and no error for user ${userId} (unexpected), setting defaults.`);
         setBudgetThreshold(null);
         setSelectedCurrency('USD');
       }
@@ -129,7 +117,7 @@ export default function BudgetFlowPage() {
         setSelectedCurrency('USD');
     }
   }, [toast]);
-  
+
   const fetchExpenses = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('expenses')
@@ -146,24 +134,35 @@ export default function BudgetFlowPage() {
     }
   }, [toast]);
 
+  // Effect for loading user data (profile and expenses)
   useEffect(() => {
-    if (user && user.id) {
+    let isDataEffectMounted = true;
+
+    if (!isLoadingAuth && user && user.id) {
       setIsLoadingData(true);
       Promise.all([
         fetchProfile(user.id),
         fetchExpenses(user.id),
       ]).finally(() => {
-        setIsLoadingData(false);
+        if (isDataEffectMounted) {
+          setIsLoadingData(false);
+        }
       });
-    } else {
-      setExpenses([]); 
+    } else if (!isLoadingAuth && !user) {
+      // Auth is resolved, no user, so reset data and stop loading data
+      setExpenses([]);
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
-      if (!isLoadingAuth) { // Only set loadingData to false if auth is also done.
+      if (isDataEffectMounted) {
         setIsLoadingData(false);
       }
     }
-  }, [user, fetchProfile, fetchExpenses, isLoadingAuth]);
+    // If isLoadingAuth is true, this effect waits.
+
+    return () => {
+      isDataEffectMounted = false;
+    };
+  }, [user, isLoadingAuth, fetchProfile, fetchExpenses]);
 
 
   const availableYears = useMemo(() => {
@@ -184,19 +183,19 @@ export default function BudgetFlowPage() {
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
 
   const fetchNewTip = useCallback(async () => {
-    if (!user || isLoadingData) return; 
+    if (!user || isLoadingData) return;
     setIsLoadingTip(true);
     try {
       const tipInput = {
         financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalSpent, selectedCurrency)}. Budget: ${budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'Not set'}.`,
-        riskTolerance: "Moderate", 
-        investmentInterests: "Saving money, budgeting effectively." 
+        riskTolerance: "Moderate",
+        investmentInterests: "Saving money, budgeting effectively."
       };
       const tip = await generateFinancialTip(tipInput);
       setFinancialTip(tip);
     } catch (error) {
       console.error("Error fetching financial tip:", error);
-      setFinancialTip(null); // Clear tip on error
+      setFinancialTip(null);
       toast({ title: "Tip Error", description: "Could not fetch a new financial tip.", variant: "default" });
     } finally {
       setIsLoadingTip(false);
@@ -204,10 +203,10 @@ export default function BudgetFlowPage() {
   }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData, toast]);
 
   useEffect(() => {
-    if (user && !isLoadingData) { 
+    if (user && !isLoadingData && !isLoadingAuth) { // Ensure auth is also done
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData]);
+  }, [fetchNewTip, user, isLoadingData, isLoadingAuth]);
 
   const handleSaveExpense = async (newExpenseData: Omit<Expense, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     if (!user) {
@@ -216,7 +215,7 @@ export default function BudgetFlowPage() {
     }
     try {
       const formattedDate = format(newExpenseData.date, 'yyyy-MM-dd');
-      
+
       const { data: savedExpense, error } = await supabase
         .from('expenses')
         .insert([{ ...newExpenseData, date: formattedDate, user_id: user.id }])
@@ -225,11 +224,11 @@ export default function BudgetFlowPage() {
 
       if (error) {
         console.error("Error saving expense to Supabase:", error);
-        throw error; // Re-throw to be caught by the outer catch
+        throw error;
       }
 
       if (savedExpense) {
-        setExpenses(prevExpenses => 
+        setExpenses(prevExpenses =>
           [{ ...savedExpense, date: parseISO(savedExpense.date) } as Expense, ...prevExpenses]
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         );
@@ -247,11 +246,11 @@ export default function BudgetFlowPage() {
       return;
     }
     const headers = "ID,Date,Category,Description,Amount\n";
-    const csvContent = filteredExpenses.map(e => 
+    const csvContent = filteredExpenses.map(e =>
       `${e.id},${format(e.date, 'yyyy-MM-dd')},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)}`
     ).join("\n");
     const fullCsv = headers + csvContent;
-    
+
     const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     if (link.download !== undefined) {
@@ -275,27 +274,19 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
-      // Fetch current profile to get is_deactivated, or assume false if no profile (should be handled by trigger)
-      // This is to ensure is_deactivated isn't inadvertently changed if we are only updating threshold.
-      let currentIsDeactivated = false;
-      const { data: currentProfile } = await supabase.from('profiles').select('is_deactivated').eq('id', user.id).single();
-      if (currentProfile) {
-        currentIsDeactivated = currentProfile.is_deactivated;
-      }
-
-      const profileDataToUpsert: Profile = {
-        id: user.id,
+      const profileDataToUpsert: Partial<Profile> = { // Use Partial for upsert flexibility
+        id: user.id, // This is key for onConflict
         budget_threshold: newThreshold,
-        selected_currency: selectedCurrency,
-        is_deactivated: currentIsDeactivated, 
+        selected_currency: selectedCurrency, // Always include current currency
+        // is_deactivated will not be touched here, assuming it's handled elsewhere or defaults correctly in DB
         updated_at: new Date().toISOString(),
       };
 
       const { error } = await supabase
         .from('profiles')
-        .upsert(profileDataToUpsert, { onConflict: 'id' }) 
-        .select() 
-        .single(); 
+        .upsert(profileDataToUpsert, { onConflict: 'id' })
+        .select()
+        .single();
 
       if (error) {
         console.error("Error upserting profile for threshold:", error);
@@ -320,20 +311,13 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
-      let currentIsDeactivated = false;
-      const { data: currentProfile } = await supabase.from('profiles').select('is_deactivated').eq('id', user.id).single();
-      if (currentProfile) {
-        currentIsDeactivated = currentProfile.is_deactivated;
-      }
-
-      const profileDataToUpsert: Profile = {
+      const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold, 
-        is_deactivated: currentIsDeactivated,
+        budget_threshold: budgetThreshold, // Always include current threshold
         updated_at: new Date().toISOString(),
       };
-      
+
       const { error } = await supabase
         .from('profiles')
         .upsert(profileDataToUpsert, { onConflict: 'id' })
@@ -353,7 +337,8 @@ export default function BudgetFlowPage() {
     }
   };
 
-  if (isLoadingAuth || (!user && !isLoadingAuth) || (user && isLoadingData)) { 
+  // Display loading indicator if auth is in progress OR if auth is done, user exists, but data is still loading.
+  if (isLoadingAuth || (user && isLoadingData)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -361,12 +346,18 @@ export default function BudgetFlowPage() {
       </div>
     );
   }
-  
+
+  // Note: Redirection if !user && !isLoadingAuth is handled by the useEffect hook above.
+  // If we reach here and !user, it's a brief moment before redirection, so an empty page might flash.
+  // Or, if the redirect useEffect hasn't run yet, we might render briefly with no user.
+  // This is usually acceptable. For a more seamless loader, the redirect logic would need to be
+  // part of the main loading condition, but that can make it more complex.
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <AppHeader 
+      <AppHeader
         user={user}
-        onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)} 
+        onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)}
         totalSpent={totalSpent}
         budgetThreshold={budgetThreshold}
         selectedCurrency={selectedCurrency}
@@ -436,7 +427,7 @@ export default function BudgetFlowPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                 {filteredExpenses.length === 0 && !isLoadingData ? ( // Show message if filteredExpenses is empty AND not loading
+                 {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
                     <div className="text-center text-muted-foreground py-8 min-h-[200px] flex flex-col items-center justify-center">
                       <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
                       <p className="text-lg font-semibold">No expenses for this period.</p>
@@ -450,8 +441,8 @@ export default function BudgetFlowPage() {
           </div>
 
           <div className="space-y-6">
-             {expenses.length === 0 && !isLoadingData ? ( // Show message if expenses array is empty AND not loading
-                <Card className="shadow-lg h-[388px] flex items-center justify-center text-center text-muted-foreground p-4"> 
+             {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
+                <Card className="shadow-lg h-[388px] flex items-center justify-center text-center text-muted-foreground p-4">
                    <div>
                     <BarChart3 className="h-12 w-12 text-muted-foreground mb-4 mx-auto" />
                     <p>Your expense chart will appear here once you add some expenses.</p>
@@ -463,18 +454,18 @@ export default function BudgetFlowPage() {
             <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
           </div>
         </div>
-        
+
       </main>
 
       <AppFooter onExportClick={handleExportSummary} />
 
-      <AddExpenseSheet 
-        isOpen={isAddExpenseSheetOpen} 
-        setIsOpen={setIsAddExpenseSheetOpen} 
+      <AddExpenseSheet
+        isOpen={isAddExpenseSheetOpen}
+        setIsOpen={setIsAddExpenseSheetOpen}
         onSaveExpense={handleSaveExpense}
-        currency={selectedCurrency} 
+        currency={selectedCurrency}
       />
     </div>
   );
 }
-
+    
