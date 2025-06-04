@@ -1,7 +1,8 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,8 +26,8 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import DeleteAccountDialog from './DeleteAccountDialog';
 
+const DeleteAccountDialog = dynamic(() => import('./DeleteAccountDialog'), { ssr: false });
 
 interface HeaderProps {
   user: User | null;
@@ -86,7 +87,6 @@ export default function AppHeader({
     }
     setIsDeletingAccount(true);
     try {
-      // Step 1: Delete expenses associated with the user
       const { error: expensesError } = await supabase
         .from('expenses')
         .delete()
@@ -98,7 +98,6 @@ export default function AppHeader({
       }
       console.log("User's expenses deleted.");
 
-      // Step 2: Mark profile as deactivated
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ is_deactivated: true, updated_at: new Date().toISOString() })
@@ -110,7 +109,6 @@ export default function AppHeader({
       }
       console.log("User's profile deactivated.");
       
-      // Step 3: Sign the user out
       const { error: signOutError } = await supabase.auth.signOut();
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
@@ -164,12 +162,12 @@ export default function AppHeader({
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="text-right">
+                <div className="text-right hidden sm:block"> {/* Hide on extra small screens */}
                   <p className="text-xs md:text-sm text-muted-foreground">Total Spent</p>
                   <p className="text-sm md:text-base font-semibold">{formatCurrency(totalSpent, selectedCurrency)}</p>
                 </div>
                 {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
-                  <div className="text-right">
+                  <div className="text-right hidden md:block"> {/* Hide on small screens */}
                     <p className="text-xs md:text-sm text-muted-foreground">Budget Rem.</p>
                     <p className={`text-sm md:text-base font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
@@ -192,7 +190,7 @@ export default function AppHeader({
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full">
+                  <Button variant="ghost" size="icon" className="rounded-full" aria-label="Open user menu">
                     <UserCircle className="h-6 w-6" />
                     <span className="sr-only">User menu</span>
                   </Button>
@@ -222,12 +220,12 @@ export default function AppHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-               null // No login button if user is not logged in on main app pages
+               null
             )}
           </div>
         </div>
       </header>
-      {user && (
+      {user && isDeleteDialogOpen && (
         <DeleteAccountDialog
           isOpen={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
@@ -237,3 +235,4 @@ export default function AppHeader({
     </>
   );
 }
+

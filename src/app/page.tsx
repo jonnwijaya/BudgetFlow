@@ -3,27 +3,61 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
-import AddExpenseSheet from '@/components/app/AddExpenseSheet';
 import ExpenseList from '@/components/app/ExpenseList';
-import ExpenseChart from '@/components/app/ExpenseChart';
-import SmartTipCard from '@/components/app/SmartTipCard';
-import SetThresholdDialog from '@/components/app/SetThresholdDialog';
-import DeleteExpenseDialog from '@/components/app/DeleteExpenseDialog';
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, BarChart3, CalendarDays, Loader2 } from 'lucide-react';
 import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory } from '@/types';
-import { SUPPORTED_CURRENCIES } from '@/types'; // Added import
-import type { ExpenseFormData } from '@/components/app/AddExpenseSheet'; // Import form data type
+import { SUPPORTED_CURRENCIES } from '@/types';
+import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
+
+// Dynamically import components
+const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet'), {
+  ssr: false,
+  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" /> // Minimal overlay
+});
+const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
+  loading: () => (
+    <Card className="shadow-lg">
+      <CardHeader>
+        <CardTitle><h2 className="font-headline">Expense Breakdown</h2></CardTitle>
+        <CardDescription>Loading chart data...</CardDescription>
+      </CardHeader>
+      <CardContent className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-2">Loading chart...</p>
+      </CardContent>
+    </Card>
+  ),
+  ssr: false,
+});
+const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
+  ssr: false,
+  loading: () => (
+     <Card className="shadow-lg">
+      <CardHeader>
+          <CardTitle className="font-headline text-accent">Smart Financial Tip</CardTitle>
+      </CardHeader>
+      <CardContent className="h-20 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </CardContent>
+    </Card>
+  )
+});
+const SetThresholdDialog = dynamic(() => import('@/components/app/SetThresholdDialog'), { ssr: false });
+const DeleteExpenseDialog = dynamic(() => import('@/components/app/DeleteExpenseDialog'), { ssr: false });
+
 
 export default function BudgetFlowPage() {
   const router = useRouter();
@@ -56,12 +90,11 @@ export default function BudgetFlowPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
         setUser(session?.user ?? null);
-         // Defer setIsLoadingAuth to false until the listener confirms INITIAL_SESSION or other relevant event
       }
     }).catch(error => {
       if (isMounted) {
         console.error("Error fetching initial session:", error);
-        setIsLoadingAuth(false); // Critical to set false on error
+        setIsLoadingAuth(false);
       }
     });
     
@@ -97,13 +130,11 @@ export default function BudgetFlowPage() {
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') { // "No rows found" - Profile doesn't exist for this user yet
+        if (error.code === 'PGRST116') {
           console.log('No profile found for user, using default values.');
-          setBudgetThreshold(null); // Or a default budget if you prefer
-          setSelectedCurrency('USD'); // Default currency
-          // No need to toast for this specific error, as it's a normal case for new users
+          setBudgetThreshold(null);
+          setSelectedCurrency('USD');
         } else {
-          // Handle other unexpected errors
           console.error('Error fetching profile:', error);
           toast({ title: 'Profile Load Error', description: `Could not load your profile: ${error.message}`, variant: 'destructive' });
         }
@@ -150,7 +181,6 @@ export default function BudgetFlowPage() {
         if (isDataEffectMounted) setIsLoadingData(false);
       });
     } else if (!isLoadingAuth && !user) {
-      // Reset data if user logs out
       setExpenses([]);
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
@@ -213,12 +243,12 @@ export default function BudgetFlowPage() {
       const formattedDate = format(expenseData.date, 'yyyy-MM-dd');
       const dataToSave = { ...expenseData, date: formattedDate, user_id: user.id };
 
-      if (expenseToEdit) { // UPDATE existing expense
+      if (expenseToEdit) {
         const { data: updatedExpense, error } = await supabase
           .from('expenses')
-          .update({ ...expenseData, date: formattedDate, updated_at: new Date().toISOString() }) // user_id is not changed, it's part of .eq
+          .update({ ...expenseData, date: formattedDate, updated_at: new Date().toISOString() })
           .eq('id', expenseToEdit.id)
-          .eq('user_id', user.id) // Security: ensure user owns the expense
+          .eq('user_id', user.id)
           .select()
           .single();
 
@@ -232,8 +262,8 @@ export default function BudgetFlowPage() {
           );
           toast({ title: "Expense Updated", description: `${updatedExpense.description} successfully updated.` });
         }
-        setExpenseToEdit(null); // Clear edit mode
-      } else { // INSERT new expense
+        setExpenseToEdit(null);
+      } else {
         const { data: savedExpense, error } = await supabase
           .from('expenses')
           .insert([dataToSave])
@@ -256,15 +286,15 @@ export default function BudgetFlowPage() {
     }
   };
 
-  const handleEditExpenseClick = (expense: Expense) => {
+  const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
     setIsAddExpenseSheetOpen(true);
-  };
+  }, [setExpenseToEdit, setIsAddExpenseSheetOpen]);
 
-  const handleDeleteExpenseClick = (id: string) => {
+  const handleDeleteExpenseClick = useCallback((id: string) => {
     setExpenseIdToDelete(id);
     setIsDeleteExpenseDialogOpen(true);
-  };
+  }, [setExpenseIdToDelete, setIsDeleteExpenseDialogOpen]);
 
   const confirmDeleteExpense = async () => {
     if (!user || !expenseIdToDelete) {
@@ -276,7 +306,7 @@ export default function BudgetFlowPage() {
         .from('expenses')
         .delete()
         .eq('id', expenseIdToDelete)
-        .eq('user_id', user.id); // Security: ensure user owns the expense
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -362,7 +392,7 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold, // Preserve existing budget threshold
+        budget_threshold: budgetThreshold,
         updated_at: new Date().toISOString(),
       };
 
@@ -396,7 +426,7 @@ export default function BudgetFlowPage() {
       <AppHeader
         user={user}
         onAddExpenseClick={() => {
-          setExpenseToEdit(null); // Ensure not in edit mode when clicking general add
+          setExpenseToEdit(null);
           setIsAddExpenseSheetOpen(true);
         }}
         totalSpent={totalSpent}
@@ -424,9 +454,9 @@ export default function BudgetFlowPage() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-6 w-6 text-primary" />
-                    <CardTitle className="font-headline">Recent Expenses</CardTitle>
+                    <CardTitle className="font-headline"><h2>Recent Expenses</h2></CardTitle>
                   </div>
-                  <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />
+                  {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -495,33 +525,38 @@ export default function BudgetFlowPage() {
                    </div>
                 </Card>
               ) : (
-                <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
+                user && <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
               )}
-            <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
+            {user && <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />}
           </div>
         </div>
       </main>
 
       <AppFooter onExportClick={handleExportSummary} />
 
-      <AddExpenseSheet
-        isOpen={isAddExpenseSheetOpen}
-        setIsOpen={(isOpen) => {
-            setIsAddExpenseSheetOpen(isOpen);
-            if (!isOpen) {
-                setExpenseToEdit(null); // Clear edit mode when sheet is closed
-            }
-        }}
-        onSaveExpense={handleSaveExpense}
-        currency={selectedCurrency}
-        expenseToEdit={expenseToEdit}
-      />
-      <DeleteExpenseDialog
-        isOpen={isDeleteExpenseDialogOpen}
-        onOpenChange={setIsDeleteExpenseDialogOpen}
-        onConfirmDelete={confirmDeleteExpense}
-        itemName="this expense"
-      />
+      {user && isAddExpenseSheetOpen && (
+        <AddExpenseSheet
+          isOpen={isAddExpenseSheetOpen}
+          setIsOpen={(isOpen) => {
+              setIsAddExpenseSheetOpen(isOpen);
+              if (!isOpen) {
+                  setExpenseToEdit(null); 
+              }
+          }}
+          onSaveExpense={handleSaveExpense}
+          currency={selectedCurrency}
+          expenseToEdit={expenseToEdit}
+        />
+      )}
+      {user && isDeleteExpenseDialogOpen && (
+        <DeleteExpenseDialog
+          isOpen={isDeleteExpenseDialogOpen}
+          onOpenChange={setIsDeleteExpenseDialogOpen}
+          onConfirmDelete={confirmDeleteExpense}
+          itemName="this expense"
+        />
+      )}
     </div>
   );
 }
+
