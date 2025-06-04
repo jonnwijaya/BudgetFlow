@@ -51,6 +51,7 @@ export default function AppHeader({
   const router = useRouter();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null;
@@ -69,23 +70,45 @@ export default function AppHeader({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
-      router.push('/login');
+      router.replace('/login'); 
     }
     setIsLoggingOut(false);
   };
 
   const handleDeleteAccount = async () => {
-    // Actual deletion logic handled by Supabase Edge Function (TODO)
-    console.log("TODO: Call Supabase Edge Function to delete user data for user ID:", user?.id);
-    
-    await supabase.auth.signOut();
-    toast({
-      title: "Account Deletion Initiated",
-      description: "You have been logged out. Your account will be fully deleted shortly.",
-      variant: "default",
-    });
-    router.push('/register'); // Or '/login'
-    setIsDeleteDialogOpen(false);
+    setIsDeletingAccount(true);
+    try {
+      // console.log("TODO: Call Supabase Edge Function to delete user data for user ID:", user?.id);
+      // For now, we just sign out. The actual data deletion needs a backend function.
+      
+      const { error: signOutError } = await supabase.auth.signOut();
+
+      if (signOutError) {
+        toast({
+          title: "Logout Failed During Account Deletion",
+          description: signOutError.message,
+          variant: "destructive",
+        });
+        // Do not proceed to redirect if sign out failed
+      } else {
+        toast({
+          title: "Account Deletion Initiated",
+          description: "You have been logged out. Your account data will be removed as per policy. Redirecting...",
+          variant: "default",
+        });
+        router.replace('/register'); // Or '/login'
+      }
+    } catch (e: any) {
+      // Catch any other unexpected errors during the process
+      toast({
+        title: "Error During Account Deletion",
+        description: e.message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingAccount(false);
+      setIsDeleteDialogOpen(false); // Ensure dialog closes
+    }
   };
 
 
@@ -155,8 +178,12 @@ export default function AppHeader({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
+                  <DropdownMenuItem 
+                    onClick={() => setIsDeleteDialogOpen(true)} 
+                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    disabled={isDeletingAccount}
+                  >
+                    {isDeletingAccount ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                     Delete Account
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
@@ -185,3 +212,4 @@ export default function AppHeader({
     </>
   );
 }
+

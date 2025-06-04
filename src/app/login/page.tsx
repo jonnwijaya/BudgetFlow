@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import type { Subscription } from '@supabase/supabase-js';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -40,28 +41,40 @@ export default function LoginPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const checkUser = async () => {
+    let authSubscription: Subscription | null = null;
+
+    // Check initial session state. If user is already logged in, redirect to home.
+    const checkInitialSession = async () => {
+      if (!isMounted) return;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (isMounted && session) {
-          router.push('/');
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        if (isMounted && initialSession) {
+          router.replace('/'); // Use replace to avoid login page in history
         }
       } catch (e) {
-        console.error("Error checking user session on login page:", e);
-        if (isMounted) {
-          toast({
-            title: 'Error',
-            description: 'Could not verify session. Please try logging in.',
-            variant: 'destructive',
-          });
-        }
+        console.error("Error checking initial session on login page:", e);
+        // Optionally toast an error if needed, but be mindful on logout flows
       }
     };
-    checkUser();
+
+    checkInitialSession();
+
+    // Listen for auth state changes (e.g., after OAuth, or if session is restored)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      
+      if (event === 'SIGNED_IN' && session) {
+        router.replace('/'); // Use replace to avoid login page in history
+      }
+      // If SIGNED_OUT, user should remain on login page, so no explicit action needed.
+    });
+    authSubscription = subscription;
+
     return () => {
       isMounted = false;
+      authSubscription?.unsubscribe();
     };
-  }, [router, toast]);
+  }, [router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -87,7 +100,7 @@ export default function LoginPage() {
         title: 'Login Successful',
         description: 'Redirecting to your dashboard...',
       });
-      router.push('/'); 
+      // No explicit router.push('/') here, onAuthStateChange listener will handle it
     } catch (error: any) {
       toast({
         title: 'Login Failed',
@@ -105,23 +118,22 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin, // Supabase redirects here after its own /auth/v1/callback
+          redirectTo: `${window.location.origin}`, 
         },
       });
       if (error) {
         throw error;
       }
-      // Supabase handles the redirection to Google.
-      // The user will be redirected away, so setIsLoading(false) might not be hit here.
-      // It will be reset if an error occurs or when the component re-mounts.
     } catch (error: any) {
       toast({
         title: 'Google Sign-In Failed',
         description: error.message || 'Could not sign in with Google. Please try again.',
         variant: 'destructive',
       });
-      setIsLoading(false); // Ensure loading is false on error
+      setIsLoading(false); 
     }
+    // setIsLoading(false) might not be reached if redirect happens quickly.
+    // It will reset on error or component re-evaluation.
   };
 
 
@@ -217,3 +229,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
