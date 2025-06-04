@@ -8,20 +8,20 @@ export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
 
 export interface Expense {
   id: string; // Will be UUID from Supabase
-  user_id?: string; // Foreign key, useful if passing around, but primarily for DB
+  user_id: string; // Foreign key, explicitly not optional as it's crucial
   category: ExpenseCategory;
   date: Date; // Stored as DATE in DB, handled as Date object in JS
   description: string;
   amount: number;
-  created_at?: string; // Timestamptz from Supabase
-  updated_at?: string; // Timestamptz from Supabase
+  created_at: string; // Timestamptz from Supabase, explicitly not optional
+  updated_at: string; // Timestamptz from Supabase, explicitly not optional
 }
 
 export interface Profile {
   id: string; // UUID, matches auth.users.id
   budget_threshold: number | null;
   selected_currency: CurrencyCode;
-  is_deactivated: boolean; // Added for deactivation status
+  is_deactivated: boolean; 
   updated_at?: string;
 }
 

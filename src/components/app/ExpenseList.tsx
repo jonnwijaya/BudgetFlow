@@ -1,16 +1,18 @@
 
 'use client';
 
-import { type Expense, type CurrencyCode } from '@/types';
+import type { Expense, CurrencyCode } from '@/types';
 import ExpenseListItem from './ExpenseListItem';
 import { FileText } from 'lucide-react';
 
 interface ExpenseListProps {
   expenses: Expense[];
   currency: CurrencyCode;
+  onEditExpense: (expense: Expense) => void;
+  onDeleteExpense: (expenseId: string) => void;
 }
 
-export default function ExpenseList({ expenses, currency }: ExpenseListProps) {
+export default function ExpenseList({ expenses, currency, onEditExpense, onDeleteExpense }: ExpenseListProps) {
   if (expenses.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8 min-h-[200px] flex flex-col items-center justify-center">
@@ -24,9 +26,14 @@ export default function ExpenseList({ expenses, currency }: ExpenseListProps) {
   return (
     <div className="space-y-1 min-h-[200px]">
       {expenses.map(expense => (
-        <ExpenseListItem key={expense.id} expense={expense} currency={currency} />
+        <ExpenseListItem 
+          key={expense.id} 
+          expense={expense} 
+          currency={currency}
+          onEdit={onEditExpense}
+          onDelete={onDeleteExpense}
+        />
       ))}
     </div>
   );
 }
-

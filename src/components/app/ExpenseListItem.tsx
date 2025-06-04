@@ -1,17 +1,20 @@
 
 'use client';
 
-import { type Expense, type ExpenseCategory, type CurrencyCode } from '@/types';
+import type { Expense, ExpenseCategory, CurrencyCode } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format as formatDate, parseISO } from 'date-fns'; // Import parseISO
+import { Button } from '@/components/ui/button';
+import { format as formatDate, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/utils';
 import {
-  Utensils, Car, Home, Zap, Film, ShoppingBag, Plane, HeartPulse, GraduationCap, MoreHorizontal, CircleDollarSign
+  Utensils, Car, Home, Zap, Film, ShoppingBag, Plane, HeartPulse, GraduationCap, MoreHorizontal, CircleDollarSign, Pencil, Trash2
 } from 'lucide-react';
 
 interface ExpenseListItemProps {
   expense: Expense;
   currency: CurrencyCode;
+  onEdit: (expense: Expense) => void;
+  onDelete: (expenseId: string) => void;
 }
 
 const categoryIcons: Record<ExpenseCategory, React.ElementType> = {
@@ -27,28 +30,38 @@ const categoryIcons: Record<ExpenseCategory, React.ElementType> = {
   Other: MoreHorizontal,
 };
 
-export default function ExpenseListItem({ expense, currency }: ExpenseListItemProps) {
+export default function ExpenseListItem({ expense, currency, onEdit, onDelete }: ExpenseListItemProps) {
   const Icon = categoryIcons[expense.category] || CircleDollarSign;
-
-  // Ensure expense.date is a Date object. Supabase might return it as a string.
   const dateObject = typeof expense.date === 'string' ? parseISO(expense.date) : expense.date;
 
   return (
-    <Card className="mb-4 shadow-sm hover:shadow-md transition-shadow duration-200">
-      <CardHeader className="pb-2">
+    <Card className="mb-2 shadow-sm hover:shadow-md transition-shadow duration-200">
+      <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Icon className="h-6 w-6 text-primary" />
-            <CardTitle className="text-lg font-semibold">{expense.description}</CardTitle>
+            <Icon className="h-5 w-5 text-primary shrink-0" />
+            <CardTitle className="text-base font-semibold leading-tight">{expense.description}</CardTitle>
           </div>
-          <p className="text-xl font-bold text-primary">{formatCurrency(expense.amount, currency)}</p>
+          <p className="text-lg font-bold text-primary whitespace-nowrap">{formatCurrency(expense.amount, currency)}</p>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{expense.category}</span>
-          {/* Format the dateObject */}
-          <span>{formatDate(dateObject, 'MMM dd, yyyy')}</span>
+      <CardContent className="px-4 pb-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+             <span>{expense.category}</span>
+             <span>&bull;</span>
+             <span>{formatDate(dateObject, 'MMM dd, yyyy')}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(expense)}>
+              <Pencil className="h-3.5 w-3.5" />
+              <span className="sr-only">Edit</span>
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(expense.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
