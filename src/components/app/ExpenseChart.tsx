@@ -43,13 +43,13 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
   if (expenses.length === 0) {
     return (
       <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="font-headline"><h2>Expense Breakdown</h2></CardTitle>
-          <CardDescription>No data for the selected period.</CardDescription>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="font-headline text-base sm:text-xl"><h2>Expense Breakdown</h2></CardTitle>
+          <CardDescription className="text-xs sm:text-sm">No data for the selected period.</CardDescription>
         </CardHeader>
-        <CardContent className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
-          <PieChartIcon className="h-12 w-12 text-muted-foreground mb-4" />
-          <p>Add expenses or select a different period.</p>
+        <CardContent className="h-[250px] sm:h-[300px] flex flex-col items-center justify-center text-muted-foreground p-3 sm:p-4">
+          <PieChartIcon className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
+          <p className="text-xs sm:text-sm text-center">Add expenses or select a different period.</p>
         </CardContent>
       </Card>
     );
@@ -57,20 +57,20 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
 
   return (
     <Card className="shadow-lg">
-      <CardHeader>
-        <CardTitle className="font-headline"><h2>Expense Breakdown</h2></CardTitle>
-        <CardDescription>Spending distribution by category for the selected period.</CardDescription>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="font-headline text-base sm:text-xl"><h2>Expense Breakdown</h2></CardTitle>
+        <CardDescription className="text-xs sm:text-sm">Spending distribution by category.</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
+      <CardContent className="p-2 sm:p-4">
+        <ResponsiveContainer width="100%" height={250} className="sm:!h-[300px]">
           <RechartsPieChart>
             <Pie
               data={chartData}
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={70}
-              innerRadius={35}
+              outerRadius={window.innerWidth < 640 ? 60 : 70} // Smaller radius for mobile
+              innerRadius={window.innerWidth < 640 ? 30 : 35} // Smaller radius for mobile
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
@@ -82,7 +82,7 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
             </Pie>
             <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
             <Legend 
-              wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} 
+              wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} 
               iconSize={8} 
               layout="horizontal" 
               verticalAlign="bottom" 
@@ -94,4 +94,3 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
     </Card>
   );
 }
-

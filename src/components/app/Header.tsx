@@ -141,13 +141,13 @@ export default function AppHeader({
 
   return (
     <>
-      <header className="bg-card border-b p-4 shadow-sm">
-        <div className="container mx-auto flex items-center justify-between">
+      <header className="bg-card border-b shadow-sm">
+        <div className="container mx-auto flex items-center justify-between py-3 px-3 sm:px-4">
           <div className="flex items-center gap-2">
-            <Wallet className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-headline font-bold text-primary">BudgetFlow</h1>
+            <Wallet className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+            <h1 className="text-xl sm:text-2xl font-headline font-bold text-primary">BudgetFlow</h1>
           </div>
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-3">
             {user && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
@@ -166,8 +166,7 @@ export default function AppHeader({
                 </Select>
                 
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground sm:hidden">Spent</p>
-                  <p className="text-xs text-muted-foreground hidden sm:block">Total Spent</p>
+                  <p className="text-xs text-muted-foreground">Spent</p>
                   <p className="text-sm font-semibold">
                     {formatCurrency(totalSpent, selectedCurrency)}
                   </p>
@@ -175,8 +174,7 @@ export default function AppHeader({
 
                 {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
                   <div className="text-center">
-                     <p className="text-xs text-muted-foreground sm:hidden">Rem.</p>
-                     <p className="text-xs text-muted-foreground hidden sm:block">Budget Rem.</p>
+                     <p className="text-xs text-muted-foreground">Rem.</p>
                     <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
@@ -199,8 +197,8 @@ export default function AppHeader({
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full" aria-label="Open user menu">
-                    <UserCircle className="h-6 w-6" />
+                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 sm:h-10 sm:w-10" aria-label="Open user menu">
+                    <UserCircle className="h-5 w-5 sm:h-6 sm:w-6" />
                     <span className="sr-only">User menu</span>
                   </Button>
                 </DropdownMenuTrigger>
