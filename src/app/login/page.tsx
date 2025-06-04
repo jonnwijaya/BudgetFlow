@@ -29,14 +29,29 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.push('/');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (isMounted && session) {
+          router.push('/');
+        }
+      } catch (e) {
+        console.error("Error checking user session on login page:", e);
+        if (isMounted) {
+          toast({
+            title: 'Error',
+            description: 'Could not verify session. Please try logging in.',
+            variant: 'destructive',
+          });
+        }
       }
     };
     checkUser();
-  }, [router]);
+    return () => {
+      isMounted = false;
+    };
+  }, [router, toast]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -63,7 +78,7 @@ export default function LoginPage() {
         description: 'Redirecting to your dashboard...',
       });
       router.push('/'); 
-      router.refresh(); // Force refresh to update header state
+      router.refresh(); 
     } catch (error: any) {
       toast({
         title: 'Login Failed',

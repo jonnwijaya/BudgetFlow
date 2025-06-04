@@ -38,32 +38,56 @@ export default function BudgetFlowPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error getting session:', error);
-        router.push('/login');
-        return;
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        if (error) {
+          console.error('Error getting session:', error);
+          router.push('/login');
+          return; 
+        }
+
+        if (!session) {
+          router.push('/login');
+        } else {
+          setUser(session.user);
+        }
+      } catch (e) {
+        console.error("Unexpected error during session check:", e);
+        if (isMounted) {
+          try {
+            router.push('/login');
+          } catch (routerError) {
+            console.error("Failed to redirect to login after error:", routerError);
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAuth(false);
+        }
       }
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-      }
-      setIsLoadingAuth(false);
     };
+
     checkSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (!isMounted) return;
+      
+      if (event === 'SIGNED_OUT' || !currentSession) {
         setUser(null);
         router.push('/login');
-      } else if (session) {
-        setUser(session.user);
+      } else if (currentSession) {
+        setUser(currentSession.user);
       }
     });
 
     return () => {
+      isMounted = false;
       authListener?.unsubscribe();
     };
   }, [router]);
