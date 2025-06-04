@@ -6,6 +6,11 @@ body {
   font-family: 'PT Sans', sans-serif;
 }
 
+/* Remove focus outline from Recharts pie sectors */
+.recharts-pie-sector:focus, .recharts-sector:focus {
+  outline: none;
+}
+
 @layer base {
   :root {
     --background: 206 25% 95%; /* Light grey #F0F4F7 */

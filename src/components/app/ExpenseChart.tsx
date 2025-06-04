@@ -2,23 +2,22 @@
 
 import { type Expense } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'; // Direct import for more control
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { useMemo } from 'react';
 
 interface ExpenseChartProps {
   expenses: Expense[];
 }
 
-// Define a fixed set of colors for categories to ensure consistency
 const COLORS = [
   'hsl(var(--chart-1))',
   'hsl(var(--chart-2))',
   'hsl(var(--chart-3))',
   'hsl(var(--chart-4))',
   'hsl(var(--chart-5))',
-  '#82ca9d', // A fallback green
-  '#ffc658', // A fallback yellow
-  '#8884d8', // A fallback purple
+  '#82ca9d', 
+  '#ffc658', 
+  '#8884d8', 
 ];
 
 
@@ -65,18 +64,18 @@ export default function ExpenseChart({ expenses }: ExpenseChartProps) {
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={80}
+              outerRadius={75} // Reduced radius for better fit
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              // Removed direct label prop to rely on tooltip and legend
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
-            <Legend />
+            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} iconSize={10} />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

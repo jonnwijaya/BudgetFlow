@@ -17,22 +17,27 @@ export default function AppHeader({ onAddExpenseClick, totalSpent, budgetThresho
           <Wallet className="h-8 w-8 text-primary" />
           <h1 className="text-2xl font-headline font-bold text-primary">BudgetFlow</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <div className="text-right">
-            <p className="text-sm text-muted-foreground">Total Spent</p>
-            <p className="text-lg font-semibold">${totalSpent.toFixed(2)}</p>
+            <p className="text-xs md:text-sm text-muted-foreground">Total Spent</p>
+            <p className="text-base md:text-lg font-semibold">${totalSpent.toFixed(2)}</p>
           </div>
           {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Budget Remaining</p>
-              <p className={`text-lg font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
+              <p className="text-xs md:text-sm text-muted-foreground">Budget Rem.</p>
+              <p className={`text-base md:text-lg font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                 ${budgetRemaining.toFixed(2)}
               </p>
             </div>
           )}
-          <Button onClick={onAddExpenseClick} variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground">
-            <PlusCircle className="mr-2 h-5 w-5" />
-            Add Expense
+          <Button 
+            onClick={onAddExpenseClick} 
+            variant="default" 
+            className="bg-accent hover:bg-accent/90 text-accent-foreground"
+            aria-label="Add Expense"
+          >
+            <PlusCircle className="h-5 w-5 shrink-0 md:mr-2" />
+            <span className="hidden md:inline">Add Expense</span>
           </Button>
         </div>
       </div>
