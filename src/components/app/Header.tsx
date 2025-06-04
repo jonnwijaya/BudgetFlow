@@ -59,13 +59,15 @@ export default function AppHeader({
   const handleLogout = async () => {
     setIsLoggingOut(true);
     const { error } = await supabase.auth.signOut();
-    if (error) {
+    
+    if (error && error.message !== 'Auth session missing!') {
       toast({
         title: 'Logout Failed',
         description: error.message,
         variant: 'destructive',
       });
     } else {
+      // If error is "Auth session missing!" or no error, proceed as successful logout
       toast({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
@@ -79,18 +81,17 @@ export default function AppHeader({
     setIsDeletingAccount(true);
     try {
       // console.log("TODO: Call Supabase Edge Function to delete user data for user ID:", user?.id);
-      // For now, we just sign out. The actual data deletion needs a backend function.
       
       const { error: signOutError } = await supabase.auth.signOut();
 
-      if (signOutError) {
+      if (signOutError && signOutError.message !== 'Auth session missing!') {
         toast({
           title: "Logout Failed During Account Deletion",
           description: signOutError.message,
           variant: "destructive",
         });
-        // Do not proceed to redirect if sign out failed
       } else {
+         // If error is "Auth session missing!" or no error, proceed
         toast({
           title: "Account Deletion Initiated",
           description: "You have been logged out. Your account data will be removed as per policy. Redirecting...",
@@ -99,7 +100,6 @@ export default function AppHeader({
         router.replace('/register'); // Or '/login'
       }
     } catch (e: any) {
-      // Catch any other unexpected errors during the process
       toast({
         title: "Error During Account Deletion",
         description: e.message || "An unexpected error occurred.",
@@ -107,7 +107,7 @@ export default function AppHeader({
       });
     } finally {
       setIsDeletingAccount(false);
-      setIsDeleteDialogOpen(false); // Ensure dialog closes
+      setIsDeleteDialogOpen(false);
     }
   };
 
