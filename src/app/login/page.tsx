@@ -78,7 +78,7 @@ export default function LoginPage() {
         description: 'Redirecting to your dashboard...',
       });
       router.push('/'); 
-      router.refresh(); 
+      // router.refresh(); // Removed to potentially speed up login navigation
     } catch (error: any) {
       toast({
         title: 'Login Failed',
@@ -121,7 +121,14 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Password</FormLabel>
+                      <Link href="/forgot-password" passHref legacyBehavior>
+                        <a className="text-sm font-medium text-primary hover:underline">
+                          Forgot password?
+                        </a>
+                      </Link>
+                    </div>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
