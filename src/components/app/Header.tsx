@@ -30,7 +30,7 @@ import DeleteAccountDialog from './DeleteAccountDialog';
 
 
 interface HeaderProps {
-  user: User | null; 
+  user: User | null;
   onAddExpenseClick: () => void;
   totalSpent: number;
   budgetThreshold?: number | null;
@@ -39,10 +39,10 @@ interface HeaderProps {
   currencies: ReadonlyArray<{ code: CurrencyCode; name: string; symbol: string }>;
 }
 
-export default function AppHeader({ 
+export default function AppHeader({
   user,
-  onAddExpenseClick, 
-  totalSpent, 
+  onAddExpenseClick,
+  totalSpent,
   budgetThreshold,
   selectedCurrency,
   onCurrencyChange,
@@ -59,7 +59,7 @@ export default function AppHeader({
   const handleLogout = async () => {
     setIsLoggingOut(true);
     const { error } = await supabase.auth.signOut();
-    
+
     if (error && error.message !== 'Auth session missing!') {
       toast({
         title: 'Logout Failed',
@@ -67,21 +67,42 @@ export default function AppHeader({
         variant: 'destructive',
       });
     } else {
-      // If error is "Auth session missing!" or no error, proceed as successful logout
       toast({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
-      router.replace('/login'); 
+      router.replace('/login');
     }
     setIsLoggingOut(false);
   };
 
   const handleDeleteAccount = async () => {
+    if (!user) {
+        toast({
+            title: "Error",
+            description: "You must be logged in to delete your account.",
+            variant: "destructive",
+        });
+        return;
+    }
     setIsDeletingAccount(true);
     try {
-      // console.log("TODO: Call Supabase Edge Function to delete user data for user ID:", user?.id);
-      
+      // Call the Supabase Edge Function
+      const { data, error: functionError } = await supabase.functions.invoke('delete-user-account');
+
+      if (functionError) {
+        console.error("Edge function error:", functionError);
+        throw functionError; // This will be caught by the catch block
+      }
+
+      if (data?.error) {
+        console.error("Error from edge function data:", data.error);
+        throw new Error(data.error);
+      }
+
+      console.log("Edge function success data:", data);
+
+      // Even if the function call succeeds, we still need to sign out the client
       const { error: signOutError } = await supabase.auth.signOut();
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
@@ -90,11 +111,11 @@ export default function AppHeader({
           description: signOutError.message,
           variant: "destructive",
         });
+        // Don't redirect yet if logout itself failed unexpectedly
       } else {
-         // If error is "Auth session missing!" or no error, proceed
         toast({
-          title: "Account Deletion Initiated",
-          description: "You have been logged out. Your account data will be removed as per policy. Redirecting...",
+          title: "Account Deletion Successful",
+          description: "Your account has been deleted. Redirecting...",
           variant: "default",
         });
         router.replace('/register'); // Or '/login'
@@ -102,7 +123,7 @@ export default function AppHeader({
     } catch (e: any) {
       toast({
         title: "Error During Account Deletion",
-        description: e.message || "An unexpected error occurred.",
+        description: e.message || "An unexpected error occurred. Please try again or contact support.",
         variant: "destructive",
       });
     } finally {
@@ -147,9 +168,9 @@ export default function AppHeader({
                     </p>
                   </div>
                 )}
-                <Button 
-                  onClick={onAddExpenseClick} 
-                  variant="default" 
+                <Button
+                  onClick={onAddExpenseClick}
+                  variant="default"
                   className="bg-accent hover:bg-accent/90 text-accent-foreground"
                   aria-label="Add Expense"
                   size="sm"
@@ -178,8 +199,8 @@ export default function AppHeader({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => setIsDeleteDialogOpen(true)} 
+                  <DropdownMenuItem
+                    onClick={() => setIsDeleteDialogOpen(true)}
                     className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                     disabled={isDeletingAccount}
                   >
@@ -212,4 +233,3 @@ export default function AppHeader({
     </>
   );
 }
-
