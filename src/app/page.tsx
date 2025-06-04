@@ -26,23 +26,21 @@ export default function BudgetFlowPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingData, setIsLoadingData] = useState(true); // For profile and expenses
+  const [isLoadingData, setIsLoadingData] = useState(true); 
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
   
-  // Profile state
   const [budgetThreshold, setBudgetThreshold] = useState<number | null>(null);
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD'); // Default
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD'); 
 
   const { toast } = useToast();
 
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
-  // Auth listener
   useEffect(() => {
     let isMounted = true;
     let authSubscription: Subscription | undefined;
@@ -72,15 +70,16 @@ export default function BudgetFlowPage() {
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
         if (!isMounted) return;
-        authSubscription = subscription; // Assign here to ensure it's captured for cleanup
+        authSubscription = subscription; 
         if (event === 'SIGNED_OUT' || !currentSession) {
           setUser(null);
-          setExpenses([]);
-          setBudgetThreshold(null);
-          setSelectedCurrency('USD');
           router.push('/login');
         } else if (currentSession) {
-          setUser(currentSession.user);
+          if (!user || user.id !== currentSession.user.id) {
+             setUser(currentSession.user);
+          } else if (user && JSON.stringify(user) !== JSON.stringify(currentSession.user)) {
+             setUser(currentSession.user);
+          }
         }
       });
     };
@@ -91,42 +90,46 @@ export default function BudgetFlowPage() {
       isMounted = false;
       authSubscription?.unsubscribe();
     };
-  }, [router]);
+  }, [router, user]); // Added user to dependency array to ensure re-check if user object changes from other sources, though primary updates come from within.
 
-  // Fetch user profile (budget, currency)
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error, status } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('budget_threshold, selected_currency')
+        .select('budget_threshold, selected_currency, is_deactivated')
         .eq('id', userId)
         .single();
 
-      if (error && status !== 406) { // 406 is "Not Acceptable", usually for .single() when no rows found
-        console.error('Error fetching profile:', error);
-        toast({ title: 'Error', description: 'Could not load your profile settings.', variant: 'destructive' });
-        setBudgetThreshold(null); // Reset on error
-        setSelectedCurrency('USD'); // Reset on error
+      if (error) {
+        if (error.code === 'PGRST116') { // PGRST116: No rows found by .single()
+          console.log(`No profile found for user ${userId}, setting defaults. This is normal if it's a new user or profile was not created by trigger.`);
+          setBudgetThreshold(null);
+          setSelectedCurrency('USD');
+        } else {
+          console.error('Error fetching profile:', error);
+          toast({ title: 'Profile Load Error', description: `Could not load your profile: ${error.message}`, variant: 'destructive' });
+          setBudgetThreshold(null); // Reset on other errors
+          setSelectedCurrency('USD');
+        }
       } else if (data) {
         setBudgetThreshold(data.budget_threshold);
         setSelectedCurrency((data.selected_currency as CurrencyCode) || 'USD');
+        // is_deactivated is handled by login page
       } else {
-        // No profile row found, or profile exists but fields are null.
-        // The `handle_new_user` trigger in Supabase should create a profile with default 'USD'.
-        // If `budget_threshold` is null in DB, it will be correctly set to null here.
-        // If `selected_currency` is null in DB (shouldn't happen with trigger), default to 'USD'.
-        setBudgetThreshold(null); 
-        setSelectedCurrency('USD'); 
+        // This case (data is null, error is null) should ideally not be reached if .single() is used
+        // and error handling for PGRST116 is done. But as a fallback:
+        console.log(`Profile data is null and no error for user ${userId} (unexpected), setting defaults.`);
+        setBudgetThreshold(null);
+        setSelectedCurrency('USD');
       }
-    } catch (e) {
+    } catch (e: any) {
         console.error("Unexpected error in fetchProfile:", e);
-        toast({ title: 'Profile Error', description: 'An unexpected error occurred loading profile.', variant: 'destructive' });
+        toast({ title: 'Profile System Error', description: `An unexpected error occurred loading profile: ${e.message}`, variant: 'destructive' });
         setBudgetThreshold(null);
         setSelectedCurrency('USD');
     }
   }, [toast]);
   
-  // Fetch expenses
   const fetchExpenses = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('expenses')
@@ -136,15 +139,13 @@ export default function BudgetFlowPage() {
 
     if (error) {
       console.error('Error fetching expenses:', error);
-      toast({ title: 'Error', description: 'Could not load your expenses.', variant: 'destructive' });
+      toast({ title: 'Expense Load Error', description: `Could not load expenses: ${error.message}`, variant: 'destructive' });
       setExpenses([]);
     } else if (data) {
       setExpenses(data.map(exp => ({ ...exp, date: parseISO(exp.date) })) as Expense[]);
     }
   }, [toast]);
 
-
-  // Data fetching effect when user changes
   useEffect(() => {
     if (user && user.id) {
       setIsLoadingData(true);
@@ -158,9 +159,11 @@ export default function BudgetFlowPage() {
       setExpenses([]); 
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
-      setIsLoadingData(false);
+      if (!isLoadingAuth) { // Only set loadingData to false if auth is also done.
+        setIsLoadingData(false);
+      }
     }
-  }, [user, fetchProfile, fetchExpenses]);
+  }, [user, fetchProfile, fetchExpenses, isLoadingAuth]);
 
 
   const availableYears = useMemo(() => {
@@ -193,11 +196,12 @@ export default function BudgetFlowPage() {
       setFinancialTip(tip);
     } catch (error) {
       console.error("Error fetching financial tip:", error);
-      setFinancialTip(null);
+      setFinancialTip(null); // Clear tip on error
+      toast({ title: "Tip Error", description: "Could not fetch a new financial tip.", variant: "default" });
     } finally {
       setIsLoadingTip(false);
     }
-  }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData]);
+  }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData, toast]);
 
   useEffect(() => {
     if (user && !isLoadingData) { 
@@ -219,7 +223,10 @@ export default function BudgetFlowPage() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error saving expense to Supabase:", error);
+        throw error; // Re-throw to be caught by the outer catch
+      }
 
       if (savedExpense) {
         setExpenses(prevExpenses => 
@@ -229,8 +236,8 @@ export default function BudgetFlowPage() {
         toast({ title: "Expense Added", description: `${savedExpense.description} successfully added.` });
       }
     } catch (error: any) {
-      console.error("Error saving expense:", error);
-      toast({ title: "Save Error", description: error.message || "Could not save expense.", variant: "destructive" });
+      console.error("Failed to save expense:", error);
+      toast({ title: "Save Error", description: error.message || "Could not save expense. Check console for details.", variant: "destructive" });
     }
   };
 
@@ -268,10 +275,19 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
+      // Fetch current profile to get is_deactivated, or assume false if no profile (should be handled by trigger)
+      // This is to ensure is_deactivated isn't inadvertently changed if we are only updating threshold.
+      let currentIsDeactivated = false;
+      const { data: currentProfile } = await supabase.from('profiles').select('is_deactivated').eq('id', user.id).single();
+      if (currentProfile) {
+        currentIsDeactivated = currentProfile.is_deactivated;
+      }
+
       const profileDataToUpsert: Profile = {
         id: user.id,
         budget_threshold: newThreshold,
-        selected_currency: selectedCurrency, // Ensure current currency is also part of the upsert
+        selected_currency: selectedCurrency,
+        is_deactivated: currentIsDeactivated, 
         updated_at: new Date().toISOString(),
       };
 
@@ -281,7 +297,10 @@ export default function BudgetFlowPage() {
         .select() 
         .single(); 
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error upserting profile for threshold:", error);
+        throw error;
+      }
 
       setBudgetThreshold(newThreshold);
       if (newThreshold !== null) {
@@ -290,8 +309,8 @@ export default function BudgetFlowPage() {
         toast({ title: "Budget Cleared", description: "Budget threshold has been removed." });
       }
     } catch (error: any) {
-      console.error("Error setting budget threshold:", error);
-      toast({ title: "Update Error", description: error.message || "Could not update budget.", variant: "destructive" });
+      console.error("Failed to set budget threshold:", error);
+      toast({ title: "Update Error", description: error.message || "Could not update budget. Check console.", variant: "destructive" });
     }
   };
 
@@ -301,10 +320,17 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
+      let currentIsDeactivated = false;
+      const { data: currentProfile } = await supabase.from('profiles').select('is_deactivated').eq('id', user.id).single();
+      if (currentProfile) {
+        currentIsDeactivated = currentProfile.is_deactivated;
+      }
+
       const profileDataToUpsert: Profile = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold, // Preserve current budget threshold
+        budget_threshold: budgetThreshold, 
+        is_deactivated: currentIsDeactivated,
         updated_at: new Date().toISOString(),
       };
       
@@ -314,18 +340,20 @@ export default function BudgetFlowPage() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error upserting profile for currency:", error);
+        throw error;
+      }
 
       setSelectedCurrency(newCurrency);
       toast({ title: "Currency Updated", description: `Currency changed to ${newCurrency}.`})
     } catch (error: any) {
-      console.error("Error updating currency:", error);
-      toast({ title: "Update Error", description: error.message || "Could not update currency.", variant: "destructive" });
+      console.error("Failed to update currency:", error);
+      toast({ title: "Update Error", description: error.message || "Could not update currency. Check console.", variant: "destructive" });
     }
   };
 
-
-  if (isLoadingAuth || (!user && !isLoadingAuth) || (user && isLoadingData)) { // Adjusted loading condition
+  if (isLoadingAuth || (!user && !isLoadingAuth) || (user && isLoadingData)) { 
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -408,9 +436,11 @@ export default function BudgetFlowPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                 {isLoadingData && expenses.length === 0 ? (
-                    <div className="flex items-center justify-center min-h-[200px]">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                 {filteredExpenses.length === 0 && !isLoadingData ? ( // Show message if filteredExpenses is empty AND not loading
+                    <div className="text-center text-muted-foreground py-8 min-h-[200px] flex flex-col items-center justify-center">
+                      <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-lg font-semibold">No expenses for this period.</p>
+                      <p>Try selecting a different month/year or add new expenses.</p>
                     </div>
                   ) : (
                     <ExpenseList expenses={filteredExpenses} currency={selectedCurrency} />
@@ -420,9 +450,12 @@ export default function BudgetFlowPage() {
           </div>
 
           <div className="space-y-6">
-             {isLoadingData && expenses.length === 0 ? (
-                <Card className="shadow-lg h-[388px] flex items-center justify-center"> 
-                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
+             {expenses.length === 0 && !isLoadingData ? ( // Show message if expenses array is empty AND not loading
+                <Card className="shadow-lg h-[388px] flex items-center justify-center text-center text-muted-foreground p-4"> 
+                   <div>
+                    <BarChart3 className="h-12 w-12 text-muted-foreground mb-4 mx-auto" />
+                    <p>Your expense chart will appear here once you add some expenses.</p>
+                   </div>
                 </Card>
               ) : (
                 <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
@@ -444,3 +477,4 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
+
