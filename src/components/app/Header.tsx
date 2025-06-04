@@ -151,7 +151,7 @@ export default function AppHeader({
             {user && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
-                  <SelectTrigger className="w-[80px] md:w-[100px] text-xs md:text-sm h-9 md:h-10">
+                  <SelectTrigger className="w-[70px] md:w-[100px] text-xs md:text-sm h-9 md:h-10">
                     <SelectValue placeholder="Currency" />
                   </SelectTrigger>
                   <SelectContent>
@@ -163,20 +163,18 @@ export default function AppHeader({
                   </SelectContent>
                 </Select>
                 
-                <div className="text-center sm:text-right">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="hidden sm:inline">Total </span>Spent
-                  </p>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground sm:hidden">Spent</p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">Total Spent</p>
                   <p className="text-sm font-semibold">
                     {formatCurrency(totalSpent, selectedCurrency)}
                   </p>
                 </div>
 
                 {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
-                  <div className="text-center sm:text-right">
-                    <p className="text-xs text-muted-foreground">
-                      <span className="hidden sm:inline">Budget </span>Rem.
-                    </p>
+                  <div className="text-center">
+                     <p className="text-xs text-muted-foreground sm:hidden">Rem.</p>
+                     <p className="text-xs text-muted-foreground hidden sm:block">Budget Rem.</p>
                     <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
