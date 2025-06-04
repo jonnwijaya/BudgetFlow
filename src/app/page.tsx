@@ -83,49 +83,20 @@ export default function BudgetFlowPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    let isMounted = true;
-    let authSub: Subscription | null = null;
     setIsLoadingAuth(true);
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isMounted) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
         setUser(session?.user ?? null);
-        // setIsLoadingAuth(false) will be handled by INITIAL_SESSION event for consistency
-      }
-    }).catch(error => {
-      if (isMounted) {
-        console.error("Error fetching initial session in page.tsx:", error);
-        // If getSession itself fails with an auth error, treat as logged out.
-        if (error.name === 'AuthApiError' || (error.message && (error.message.includes('Invalid Refresh Token') || error.message.includes('Auth session missing')))) {
-          setUser(null);
-        }
-        // setIsLoadingAuth(false) will be handled by INITIAL_SESSION event eventually
-      }
-    });
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      authSub = subscription; // Store the subscription
-      if (isMounted) {
-        setUser(session?.user ?? null);
-        // Ensure isLoadingAuth is set to false on all relevant auth events,
-        // especially INITIAL_SESSION which signifies the end of the initial auth check.
-        if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_DELETED" || event === "TOKEN_REFRESHED" || event === "PASSWORD_RECOVERY") {
-           setIsLoadingAuth(false);
-        }
-
-        // If the user is signed out or deleted, and we are not already on the login page, redirect.
-        if ((event === "SIGNED_OUT" || event === "USER_DELETED") && window.location.pathname !== '/login') {
+        setIsLoadingAuth(false);
+        if (event === 'SIGNED_OUT' && window.location.pathname !== '/login') {
           router.replace('/login');
         }
       }
-    });
-
+    );
     return () => {
-      isMounted = false;
-      authSub?.unsubscribe(); // Unsubscribe on component unmount
+      subscription?.unsubscribe();
     };
   }, [router]);
-
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -154,7 +125,7 @@ export default function BudgetFlowPage() {
       } else if (data) {
         if (data.is_deactivated) {
           toast({ title: 'Account Deactivated', description: 'This account is deactivated.', variant: 'destructive'});
-          await supabase.auth.signOut(); 
+          await supabase.auth.signOut();
           router.replace('/login');
           return;
         }
@@ -247,7 +218,7 @@ export default function BudgetFlowPage() {
     }
   }, [fetchNewTip, user, isLoadingData, isLoadingAuth]);
 
-  const handleSaveExpense = async (expenseData: ExpenseFormData) => {
+  const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
       toast({ title: "Error", description: "You must be logged in to save an expense.", variant: "destructive" });
       return;
@@ -297,7 +268,7 @@ export default function BudgetFlowPage() {
       console.error("Failed to save expense:", error);
       toast({ title: "Save Error", description: error.message || "Could not save expense.", variant: "destructive" });
     }
-  };
+  }, [user, toast, expenseToEdit]);
 
   const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
@@ -309,7 +280,7 @@ export default function BudgetFlowPage() {
     setIsDeleteExpenseDialogOpen(true);
   }, []);
 
-  const confirmDeleteExpense = async () => {
+  const confirmDeleteExpense = useCallback(async () => {
     if (!user || !expenseIdToDelete) {
       toast({ title: "Error", description: "User or expense ID missing.", variant: "destructive" });
       return;
@@ -332,7 +303,7 @@ export default function BudgetFlowPage() {
       setIsDeleteExpenseDialogOpen(false);
       setExpenseIdToDelete(null);
     }
-  };
+  }, [user, expenseIdToDelete, toast]);
 
 
   const handleExportSummary = () => {
@@ -363,16 +334,16 @@ export default function BudgetFlowPage() {
     }
   };
 
-  const handleSetThreshold = async (newThreshold: number | null) => {
+  const handleSetThreshold = useCallback(async (newThreshold: number | null) => {
     if (!user) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
     try {
-      const profileDataToUpsert: Partial<Profile> = { 
-        id: user.id, 
+      const profileDataToUpsert: Partial<Profile> = {
+        id: user.id,
         budget_threshold: newThreshold,
-        selected_currency: selectedCurrency, 
+        selected_currency: selectedCurrency,
         updated_at: new Date().toISOString(),
       };
 
@@ -394,9 +365,9 @@ export default function BudgetFlowPage() {
       console.error("Failed to set budget threshold:", error);
       toast({ title: "Update Error", description: error.message || "Could not update budget.", variant: "destructive" });
     }
-  };
+  }, [user, selectedCurrency, toast]);
 
-  const handleCurrencyChange = async (newCurrency: CurrencyCode) => {
+  const handleCurrencyChange = useCallback(async (newCurrency: CurrencyCode) => {
      if (!user) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
@@ -405,7 +376,7 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold,
+        budget_threshold: budgetThreshold, // Preserve existing budget threshold
         updated_at: new Date().toISOString(),
       };
 
@@ -423,7 +394,7 @@ export default function BudgetFlowPage() {
       console.error("Failed to update currency:", error);
       toast({ title: "Update Error", description: error.message || "Could not update currency.", variant: "destructive" });
     }
-  };
+  }, [user, budgetThreshold, toast]);
 
   if (isLoadingAuth || (user && isLoadingData)) {
     return (
@@ -467,7 +438,7 @@ export default function BudgetFlowPage() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-6 w-6 text-primary" />
-                    <CardTitle className="font-headline"><h2>Recent Expenses</h2></CardTitle>
+                    <CardTitle><h2 className="font-headline">Recent Expenses</h2></CardTitle>
                   </div>
                   {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
                 </div>
@@ -518,8 +489,8 @@ export default function BudgetFlowPage() {
                       <p>Try selecting a different month/year or add new expenses.</p>
                     </div>
                   ) : (
-                    <ExpenseList 
-                        expenses={filteredExpenses} 
+                    <ExpenseList
+                        expenses={filteredExpenses}
                         currency={selectedCurrency}
                         onEditExpense={handleEditExpenseClick}
                         onDeleteExpense={handleDeleteExpenseClick}
@@ -553,7 +524,7 @@ export default function BudgetFlowPage() {
           setIsOpen={(isOpen) => {
               setIsAddExpenseSheetOpen(isOpen);
               if (!isOpen) {
-                  setExpenseToEdit(null); 
+                  setExpenseToEdit(null);
               }
           }}
           onSaveExpense={handleSaveExpense}
@@ -572,4 +543,3 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
-
