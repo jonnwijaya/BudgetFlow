@@ -42,62 +42,54 @@ export default function UpdatePasswordPage() {
 
   useEffect(() => {
     let authSubscription: Subscription | undefined;
+    let isMounted = true;
 
-    // Check for recovery parameters in URL hash
-    // Supabase password recovery links include #access_token=...&type=recovery...
     if (!window.location.hash.includes('type=recovery') || !window.location.hash.includes('access_token')) {
+      if (isMounted) {
         setAuthError("Invalid password reset link: Missing necessary parameters.");
         setVerifyingLink(false);
         setIsRecoveryModeActive(false);
-        return; // Exit early
+      }
+      return;
     }
 
-    // Start in verifying state if hash seems plausible
     setVerifyingLink(true);
-    setIsRecoveryModeActive(false); // Ensure this is false initially
-    setAuthError(null); // Clear previous errors
+    setIsRecoveryModeActive(false);
+    setAuthError(null);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       authSubscription = subscription;
+      if (!isMounted) return;
 
       if (event === 'PASSWORD_RECOVERY' && session) {
         setIsRecoveryModeActive(true);
         setAuthError(null);
-        setVerifyingLink(false); // Successfully entered recovery mode
-      } else if (verifyingLink) {
-        // If still verifying and we get an event that's NOT PASSWORD_RECOVERY.
-        // This could mean the token was invalid or already processed.
-        // Supabase might emit SIGNED_OUT or INITIAL_SESSION (with no session) if the token fails.
+        setVerifyingLink(false);
+      } else if (verifyingLink) { 
+        // Still verifying, but not a PASSWORD_RECOVERY event yet.
+        // Supabase might emit SIGNED_OUT or INITIAL_SESSION (with no session) if the token is invalid/used.
         if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
-          setAuthError("Password recovery link may be invalid, expired, or already used. Please request a new one.");
+          setAuthError("Password recovery link may be invalid, expired, or already used. Please request a new one if this issue persists.");
           setIsRecoveryModeActive(false);
           setVerifyingLink(false);
         }
-        // Other events like INITIAL_SESSION (with session) or TOKEN_REFRESHED while still `verifyingLink`
-        // are unusual here. We let the timeout handle prolonged verification.
       } else if (!isRecoveryModeActive && event !== 'PASSWORD_RECOVERY') {
-        // If we are no longer verifying (verifyingLink is false, possibly due to an earlier event or timeout)
-        // AND we are not in recovery mode, AND this event is not PASSWORD_RECOVERY,
-        // then it's an error state. This handles cases where an initial, non-decisive event
-        // might have set verifyingLink to false, but we never achieved recovery mode.
+        // No longer verifying, not in recovery mode, and not a password recovery event.
         setAuthError("No active password recovery session. Ensure you're using a valid link from your email.");
         setIsRecoveryModeActive(false);
       }
-      // If isRecoveryModeActive is true, other events generally shouldn't change this state here,
-      // as the primary action is now the form submission.
     });
 
-    // Fallback timeout if onAuthStateChange doesn't lead to a clear resolution (recovery mode or error)
     const timeoutId = setTimeout(() => {
-        if (verifyingLink && !isRecoveryModeActive) {
-            // If still verifying after timeout AND not in recovery mode, assume failure.
-            setAuthError("Password recovery verification timed out. The link may be invalid/expired or there could be a network issue. Please try again.");
-            setIsRecoveryModeActive(false);
-            setVerifyingLink(false);
-        }
-    }, 7000); // 7 seconds timeout
+      if (isMounted && verifyingLink && !isRecoveryModeActive) {
+        setAuthError("Password recovery verification timed out. The link may be invalid/expired or there could be a network issue. Please try again or request a new link.");
+        setIsRecoveryModeActive(false);
+        setVerifyingLink(false);
+      }
+    }, 15000); // Increased timeout to 15 seconds
 
     return () => {
+      isMounted = false;
       authSubscription?.unsubscribe();
       clearTimeout(timeoutId);
     };
@@ -137,7 +129,7 @@ export default function UpdatePasswordPage() {
         title: 'Password Updated',
         description: 'Your password has been successfully updated. Please log in with your new password.',
       });
-      await supabase.auth.signOut(); // Sign out of the recovery session
+      await supabase.auth.signOut(); 
       router.push('/login');
     } catch (error: any) {
       setAuthError(error.message || 'Could not update password. Please try again or request a new reset link.');
@@ -160,8 +152,7 @@ export default function UpdatePasswordPage() {
    );
   }
 
-  // If no longer verifying, check for errors or if recovery mode is active
-  if (authError && !isRecoveryModeActive) { // Prioritize showing authError if not in recovery mode
+  if (authError && !isRecoveryModeActive) { 
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md shadow-xl">
@@ -188,8 +179,6 @@ export default function UpdatePasswordPage() {
   }
   
   if (!isRecoveryModeActive) {
-     // This case is reached if verifyingLink is false, isRecoveryModeActive is false, AND authError is null.
-     // This should be less common with the refined error handling but acts as a fallback.
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md shadow-xl">
@@ -212,7 +201,6 @@ export default function UpdatePasswordPage() {
     );
   }
 
-  // If verifyingLink is false, and isRecoveryModeActive is true (authError might exist from submit but form is still shown)
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -224,7 +212,7 @@ export default function UpdatePasswordPage() {
           <CardDescription>Please enter your new password below.</CardDescription>
         </CardHeader>
         <CardContent>
-          {authError && ( // Show non-critical auth errors here (e.g., from a previous submission attempt)
+          {authError && ( 
             <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm text-destructive">
                 <p>{authError}</p>
             </div>
