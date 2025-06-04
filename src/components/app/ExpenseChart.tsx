@@ -3,9 +3,10 @@
 
 import { type Expense, type CurrencyCode } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils';
+import { PieChartIcon } from 'lucide-react';
 
 interface ExpenseChartProps {
   expenses: Expense[];
@@ -41,13 +42,14 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
 
   if (expenses.length === 0) {
     return (
-      <Card>
+      <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Expense Breakdown</CardTitle>
-          <CardDescription>No data to display for the chart yet.</CardDescription>
+          <CardTitle className="font-headline">Expense Breakdown</CardTitle>
+          <CardDescription>No data for the selected period.</CardDescription>
         </CardHeader>
-        <CardContent className="h-[300px] flex items-center justify-center text-muted-foreground">
-          <p>Add some expenses to see your spending patterns.</p>
+        <CardContent className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
+          <PieChartIcon className="h-12 w-12 text-muted-foreground mb-4" />
+          <p>Add expenses or select a different period.</p>
         </CardContent>
       </Card>
     );
@@ -57,30 +59,38 @@ export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) 
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline">Expense Breakdown</CardTitle>
-        <CardDescription>Your spending distribution by category.</CardDescription>
+        <CardDescription>Spending distribution by category for the selected period.</CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
+          <RechartsPieChart>
             <Pie
               data={chartData}
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={75}
+              outerRadius={70} // Adjusted radius
+              innerRadius={35} // Make it a donut chart for better visuals
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
             >
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
-            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} iconSize={10} />
-          </PieChart>
+            <Legend 
+              wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} 
+              iconSize={8} 
+              layout="horizontal" 
+              verticalAlign="bottom" 
+              align="center"
+            />
+          </RechartsPieChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>
   );
 }
+

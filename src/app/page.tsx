@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
 import AddExpenseSheet from '@/components/app/AddExpenseSheet';
@@ -12,11 +12,13 @@ import AdPlaceholder from '@/components/app/AdPlaceholder';
 import SetThresholdDialog from '@/components/app/SetThresholdDialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, BarChart3 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertTriangle, BarChart3, CalendarDays } from 'lucide-react';
 import { type Expense, type FinancialTip, type CurrencyCode, SUPPORTED_CURRENCIES } from '@/types';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { format } from 'date-fns';
 
 export default function BudgetFlowPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -27,7 +29,24 @@ export default function BudgetFlowPage() {
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const { toast } = useToast();
 
-  const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  const availableYears = useMemo(() => {
+    const yearsFromExpenses = new Set(expenses.map(exp => new Date(exp.date).getFullYear()));
+    const currentYear = new Date().getFullYear();
+    yearsFromExpenses.add(currentYear); // Ensure current year is always an option
+    return Array.from(yearsFromExpenses).sort((a, b) => b - a);
+  }, [expenses]);
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => {
+      const expenseDate = new Date(exp.date);
+      return expenseDate.getMonth() === selectedMonth && expenseDate.getFullYear() === selectedYear;
+    });
+  }, [expenses, selectedMonth, selectedYear]);
+
+  const totalSpent = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
 
   const fetchNewTip = useCallback(async () => {
@@ -63,15 +82,18 @@ export default function BudgetFlowPage() {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
     };
     setExpenses(prevExpenses => [newExpense, ...prevExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    // If the new expense is in a year not previously available, refresh years (though useMemo handles this)
+    // If the new expense is in the currently selected month/year, it will show up.
+    // If user is viewing a past month and adds a new expense for current date, it won't show until they switch back.
   };
 
   const handleExportSummary = () => {
-    if (expenses.length === 0) {
-      toast({ title: "No Data", description: "No expenses to export.", variant: "default" });
+    if (filteredExpenses.length === 0) {
+      toast({ title: "No Data", description: "No expenses in the selected month to export.", variant: "default" });
       return;
     }
-    const headers = "ID,Date,Category,Description,Amount\n"; // Amounts are currency-agnostic numbers
-    const csvContent = expenses.map(e => 
+    const headers = "ID,Date,Category,Description,Amount\n";
+    const csvContent = filteredExpenses.map(e => 
       `${e.id},${e.date.toISOString().split('T')[0]},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)}`
     ).join("\n");
     const fullCsv = headers + csvContent;
@@ -81,13 +103,13 @@ export default function BudgetFlowPage() {
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", "budgetflow_summary.csv");
+      link.setAttribute("download", `budgetflow_summary_${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast({ title: "Export Successful", description: "Your expense summary has been downloaded." });
+      toast({ title: "Export Successful", description: "Your expense summary for the selected month has been downloaded." });
     } else {
        toast({ title: "Export Failed", description: "Your browser does not support this feature.", variant: "destructive" });
     }
@@ -111,7 +133,7 @@ export default function BudgetFlowPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <AppHeader 
         onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)} 
-        totalSpent={totalSpent}
+        totalSpent={totalSpent} // Will now be filtered total
         budgetThreshold={budgetThreshold}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={handleCurrencyChange}
@@ -124,7 +146,7 @@ export default function BudgetFlowPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Budget Exceeded!</AlertTitle>
             <AlertDescription>
-              You have spent {formatCurrency(totalSpent, selectedCurrency)}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
+              You have spent {formatCurrency(totalSpent, selectedCurrency)} for {format(new Date(selectedYear, selectedMonth), 'MMMM yyyy')}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
             </AlertDescription>
           </Alert>
         )}
@@ -132,21 +154,61 @@ export default function BudgetFlowPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <Card className="shadow-lg">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-6 w-6 text-primary" />
-                  <CardTitle className="font-headline">Recent Expenses</CardTitle>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-6 w-6 text-primary" />
+                    <CardTitle className="font-headline">Recent Expenses</CardTitle>
+                  </div>
+                  <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />
                 </div>
-                <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <CalendarDays className="h-4 w-4" />
+                        <span>Showing expenses for:</span>
+                    </div>
+                    <div className="flex gap-2">
+                    <Select
+                        value={selectedMonth.toString()}
+                        onValueChange={(value) => setSelectedMonth(parseInt(value))}
+                    >
+                        <SelectTrigger className="w-full sm:w-[130px] h-9">
+                        <SelectValue placeholder="Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => (
+                            <SelectItem key={i} value={i.toString()}>
+                            {format(new Date(selectedYear, i), 'MMMM')}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={selectedYear.toString()}
+                        onValueChange={(value) => setSelectedYear(parseInt(value))}
+                    >
+                        <SelectTrigger className="w-full sm:w-[100px] h-9">
+                        <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {availableYears.map(year => (
+                            <SelectItem key={year} value={year.toString()}>
+                            {year}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <ExpenseList expenses={expenses} currency={selectedCurrency} />
+                <ExpenseList expenses={filteredExpenses} currency={selectedCurrency} />
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-6">
-            <ExpenseChart expenses={expenses} currency={selectedCurrency} />
+            <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
             <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
           </div>
         </div>
@@ -166,3 +228,4 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
+
