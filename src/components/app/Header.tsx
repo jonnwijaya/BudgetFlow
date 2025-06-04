@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, LogIn, Trash2 } from 'lucide-react';
+import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,7 +25,6 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
 import DeleteAccountDialog from './DeleteAccountDialog';
 
 
@@ -67,7 +66,6 @@ export default function AppHeader({
         variant: 'destructive',
       });
     } else {
-      // Even if "Auth session missing!", we treat it as success for UI
       toast({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
@@ -81,7 +79,7 @@ export default function AppHeader({
     if (!user) {
         toast({
             title: "Error",
-            description: "You must be logged in to delete your account.",
+            description: "You must be logged in to delete your account data.",
             variant: "destructive",
         });
         return;
@@ -100,42 +98,40 @@ export default function AppHeader({
       }
       console.log("User's expenses deleted.");
 
-      // Step 2: Delete profile associated with the user
+      // Step 2: Mark profile as deactivated
       const { error: profileError } = await supabase
         .from('profiles')
-        .delete()
+        .update({ is_deactivated: true, updated_at: new Date().toISOString() })
         .eq('id', user.id);
       
       if (profileError) {
-        console.error("Error deleting user's profile:", profileError);
-        throw new Error(`Failed to delete profile: ${profileError.message}`);
+        console.error("Error deactivating user's profile:", profileError);
+        throw new Error(`Failed to deactivate profile: ${profileError.message}`);
       }
-      console.log("User's profile deleted.");
+      console.log("User's profile deactivated.");
       
       // Step 3: Sign the user out
       const { error: signOutError } = await supabase.auth.signOut();
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
-        // If sign out itself fails with an unexpected error
         toast({
-          title: "Data Deleted, Logout Issue",
-          description: `Your data was deleted, but sign out failed: ${signOutError.message}. Please try logging out manually.`,
+          title: "Data Cleared, Logout Issue",
+          description: `Your data was cleared and account deactivated, but sign out failed: ${signOutError.message}. Please try logging out manually.`,
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Account Data Cleared",
-          description: "Your application data has been cleared. You have been signed out. Note: Your authentication record still exists.",
+          title: "Account Data Cleared & Deactivated",
+          description: "Your application data has been cleared, and account access has been revoked. You have been signed out.",
           variant: "default",
         });
-        console.warn("User data (expenses, profile) deleted from client-side. Auth record NOT deleted. For full account deletion, implement a Supabase Edge Function.");
-        router.replace('/register'); // Or '/login'
       }
+      router.replace('/login'); 
 
     } catch (e: any) {
       toast({
-        title: "Error During Data Deletion",
-        description: e.message || "An unexpected error occurred while trying to clear your data.",
+        title: "Error During Data Deletion/Deactivation",
+        description: e.message || "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {
@@ -226,11 +222,7 @@ export default function AppHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button asChild variant="outline" size="sm">
-                <Link href="/login">
-                  <LogIn className="mr-2 h-4 w-4" /> Login
-                </Link>
-              </Button>
+               null // No login button if user is not logged in on main app pages
             )}
           </div>
         </div>

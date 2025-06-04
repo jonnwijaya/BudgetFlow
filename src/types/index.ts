@@ -21,6 +21,7 @@ export interface Profile {
   id: string; // UUID, matches auth.users.id
   budget_threshold: number | null;
   selected_currency: CurrencyCode;
+  is_deactivated: boolean; // Added for deactivation status
   updated_at?: string;
 }
 
