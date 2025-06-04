@@ -8,7 +8,6 @@ import AddExpenseSheet from '@/components/app/AddExpenseSheet';
 import ExpenseList from '@/components/app/ExpenseList';
 import ExpenseChart from '@/components/app/ExpenseChart';
 import SmartTipCard from '@/components/app/SmartTipCard';
-import AdPlaceholder from '@/components/app/AdPlaceholder';
 import SetThresholdDialog from '@/components/app/SetThresholdDialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,9 +81,6 @@ export default function BudgetFlowPage() {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
     };
     setExpenses(prevExpenses => [newExpense, ...prevExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    // If the new expense is in a year not previously available, refresh years (though useMemo handles this)
-    // If the new expense is in the currently selected month/year, it will show up.
-    // If user is viewing a past month and adds a new expense for current date, it won't show until they switch back.
   };
 
   const handleExportSummary = () => {
@@ -133,7 +129,7 @@ export default function BudgetFlowPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <AppHeader 
         onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)} 
-        totalSpent={totalSpent} // Will now be filtered total
+        totalSpent={totalSpent}
         budgetThreshold={budgetThreshold}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={handleCurrencyChange}
@@ -213,8 +209,6 @@ export default function BudgetFlowPage() {
           </div>
         </div>
         
-        <AdPlaceholder id="ad-slot-a" label="Your Advertisement Here - Boost Your Savings!" className="mt-6 sticky bottom-0 bg-card p-4 shadow-lg" height="h-20 md:h-24"/>
-      
       </main>
 
       <AppFooter onExportClick={handleExportSummary} />
@@ -228,4 +222,3 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
-

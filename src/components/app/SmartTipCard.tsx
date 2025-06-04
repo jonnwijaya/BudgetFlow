@@ -3,7 +3,6 @@
 import { type FinancialTip } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import AdPlaceholder from './AdPlaceholder';
 import { Lightbulb, RefreshCw, Loader2 } from 'lucide-react';
 
 interface SmartTipCardProps {
@@ -38,7 +37,6 @@ export default function SmartTipCard({ tipData, onRefreshTip, isLoading }: Smart
         ) : (
           !isLoading && <p className="text-muted-foreground">No tip available at the moment. Try refreshing!</p>
         )}
-        <AdPlaceholder id="ad-slot-b" label="Sponsored Content" height="h-16" />
       </CardContent>
     </Card>
   );
