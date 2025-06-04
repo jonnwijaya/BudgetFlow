@@ -47,7 +47,7 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
   loading: () => (
      <Card className="shadow-lg">
       <CardHeader>
-          <CardTitle className="font-headline text-accent">Smart Financial Tip</CardTitle>
+          <CardTitle className="font-headline text-accent"><h2>Smart Financial Tip</h2></CardTitle>
       </CardHeader>
       <CardContent className="h-20 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -90,29 +90,42 @@ export default function BudgetFlowPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
         setUser(session?.user ?? null);
+        // setIsLoadingAuth(false) will be handled by INITIAL_SESSION event for consistency
       }
     }).catch(error => {
       if (isMounted) {
-        console.error("Error fetching initial session:", error);
-        setIsLoadingAuth(false);
+        console.error("Error fetching initial session in page.tsx:", error);
+        // If getSession itself fails with an auth error, treat as logged out.
+        if (error.name === 'AuthApiError' || (error.message && (error.message.includes('Invalid Refresh Token') || error.message.includes('Auth session missing')))) {
+          setUser(null);
+        }
+        // setIsLoadingAuth(false) will be handled by INITIAL_SESSION event eventually
       }
     });
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      authSub = subscription;
+      authSub = subscription; // Store the subscription
       if (isMounted) {
         setUser(session?.user ?? null);
-        if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_DELETED") {
+        // Ensure isLoadingAuth is set to false on all relevant auth events,
+        // especially INITIAL_SESSION which signifies the end of the initial auth check.
+        if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_DELETED" || event === "TOKEN_REFRESHED" || event === "PASSWORD_RECOVERY") {
            setIsLoadingAuth(false);
+        }
+
+        // If the user is signed out or deleted, and we are not already on the login page, redirect.
+        if ((event === "SIGNED_OUT" || event === "USER_DELETED") && window.location.pathname !== '/login') {
+          router.replace('/login');
         }
       }
     });
 
     return () => {
       isMounted = false;
-      authSub?.unsubscribe();
+      authSub?.unsubscribe(); // Unsubscribe on component unmount
     };
-  }, []);
+  }, [router]);
+
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -289,12 +302,12 @@ export default function BudgetFlowPage() {
   const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
     setIsAddExpenseSheetOpen(true);
-  }, [setExpenseToEdit, setIsAddExpenseSheetOpen]);
+  }, []);
 
   const handleDeleteExpenseClick = useCallback((id: string) => {
     setExpenseIdToDelete(id);
     setIsDeleteExpenseDialogOpen(true);
-  }, [setExpenseIdToDelete, setIsDeleteExpenseDialogOpen]);
+  }, []);
 
   const confirmDeleteExpense = async () => {
     if (!user || !expenseIdToDelete) {

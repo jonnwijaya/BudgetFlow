@@ -63,7 +63,8 @@ export default function LoginPage() {
           }
           return false; 
         }
-        router.replace('/'); 
+        // If not deactivated and session is valid, let the main page redirect
+        // router.replace('/'); 
         return true; 
       } catch (e: any) {
         console.error("Unexpected error checking deactivation status:", e);
@@ -77,11 +78,10 @@ export default function LoginPage() {
         }
         return false; 
       } finally {
-        setIsLoading(false);
+        // setIsLoading(false); // This isLoading is for the login form submission, not initial check
       }
     }
-    // Removed setIsCheckingAuth(false) from here; it's handled by the useEffect caller.
-    return true; 
+    return true; // No session to check, or session check passed without deactivation
   }, [router, toast]);
 
 
@@ -89,24 +89,66 @@ export default function LoginPage() {
     let isMounted = true;
     let authSubscription: Subscription | null = null;
     
-    setIsCheckingAuth(true);
+    setIsCheckingAuth(true); // Start by assuming we are checking auth
+
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!isMounted) return;
-      await checkSessionAndDeactivation(initialSession, false); 
-      if (isMounted) setIsCheckingAuth(false);
-    }).catch(e => {
+
+      if (initialSession) {
+        // If a session exists, verify it (e.g., check deactivation status)
+        const stillAuthenticated = await checkSessionAndDeactivation(initialSession, false);
+        if (isMounted) {
+          if (stillAuthenticated) {
+            router.replace('/'); // User is authenticated and active, redirect to home
+          } else {
+            // User was signed out by checkSessionAndDeactivation or session was invalid.
+            setIsCheckingAuth(false); // Stop checking, login form will show
+          }
+        }
+      } else {
+        // No initial session, so stop checking and show login form
+        if (isMounted) setIsCheckingAuth(false);
+      }
+    }).catch(error => {
+      // If getSession fails (e.g. network error, or auth error like invalid token)
       if (isMounted) {
-        console.error("Error in initial getSession:", e);
-        setIsCheckingAuth(false);
+        console.error("Error in initial getSession on LoginPage:", error);
+        setIsCheckingAuth(false); // Stop checking, show login form
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
       authSubscription = subscription;
+      if (!isMounted) return;
       
       if (event === 'SIGNED_IN' && session) {
-        await checkSessionAndDeactivation(session);
+        setIsLoading(true); // Show loading indicator while checking deactivation
+        const stillAuthenticated = await checkSessionAndDeactivation(session, true);
+        if (isMounted) {
+          if (stillAuthenticated) {
+            router.replace('/');
+          } else {
+            setIsCheckingAuth(false); // Ensure form is shown if check leads to sign out
+          }
+          setIsLoading(false);
+        }
+      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        if (isMounted) setIsCheckingAuth(false);
+      } else if (event === 'INITIAL_SESSION') {
+        // This event helps confirm the end of the auth check process.
+        // The main logic is in getSession().then(), but this ensures setIsCheckingAuth(false)
+        // if it hasn't been set yet (e.g., if getSession() was quick and initialSession was null).
+        if (isMounted && isCheckingAuth) {
+            if (session) {
+                const stillAuthenticated = await checkSessionAndDeactivation(session, false);
+                if (isMounted) {
+                    if (stillAuthenticated) router.replace('/');
+                    else setIsCheckingAuth(false);
+                }
+            } else {
+                if (isMounted) setIsCheckingAuth(false);
+            }
+        }
       }
     });
 
@@ -114,7 +156,7 @@ export default function LoginPage() {
       isMounted = false;
       authSubscription?.unsubscribe();
     };
-  }, [checkSessionAndDeactivation]);
+  }, [checkSessionAndDeactivation, router, isCheckingAuth]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -135,20 +177,19 @@ export default function LoginPage() {
       if (error) {
         throw error;
       }
-      
-      toast({
-        title: 'Login Attempted',
-        description: 'Verifying account status...', 
-      });
+      // Don't toast "Login Attempted" here. Let onAuthStateChange handle 'SIGNED_IN'
+      // which will then call checkSessionAndDeactivation and provide more specific feedback.
+      // If successful, onAuthStateChange will trigger redirection via checkSessionAndDeactivation.
     } catch (error: any) {
       toast({
         title: 'Login Failed',
         description: error.message || 'Invalid credentials or account issue. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Only set isLoading false on error here
     }
+    // Do not set setIsLoading(false) here on success; let onAuthStateChange SIGNED_IN handler do it
+    // after its checks.
   };
 
   if (isCheckingAuth) {
@@ -224,3 +265,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
