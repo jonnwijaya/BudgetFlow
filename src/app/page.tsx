@@ -30,13 +30,13 @@ const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet')
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
     <Card className="shadow-lg">
-      <CardHeader>
+      <CardHeader className="p-3 sm:p-4">
         <CardTitle><h2 className="font-headline text-base sm:text-xl">Expense Breakdown</h2></CardTitle>
         <CardDescription className="text-xs sm:text-sm">Loading chart data...</CardDescription>
       </CardHeader>
-      <CardContent className="h-[250px] sm:h-[300px] flex flex-col items-center justify-center text-muted-foreground">
-        <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary" />
-        <p className="mt-2 text-sm">Loading chart...</p>
+      <CardContent className="h-[200px] sm:h-[220px] md:h-[250px] flex flex-col items-center justify-center text-muted-foreground">
+        <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary" />
+        <p className="mt-2 text-xs sm:text-sm">Loading chart...</p>
       </CardContent>
     </Card>
   ),
@@ -46,11 +46,11 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
   ssr: false,
   loading: () => (
      <Card className="shadow-lg">
-      <CardHeader>
+      <CardHeader className="p-3 sm:p-4">
           <CardTitle className="font-headline text-accent text-base sm:text-xl"><h2>Smart Financial Tip</h2></CardTitle>
       </CardHeader>
-      <CardContent className="h-16 sm:h-20 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-muted-foreground" />
+      <CardContent className="h-12 sm:h-16 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 sm:h-6 animate-spin text-muted-foreground" />
       </CardContent>
     </Card>
   )
@@ -91,8 +91,6 @@ export default function BudgetFlowPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
         setUser(session?.user ?? null);
-         // Defer setting isLoadingAuth to false until onAuthStateChange 'INITIAL_SESSION'
-         // or if no session directly here, ensuring onAuthStateChange can still react.
         if (!session) {
             setIsLoadingAuth(false);
         }
@@ -125,7 +123,7 @@ export default function BudgetFlowPage() {
       isMounted = false;
       authSubscription?.unsubscribe();
     };
-  }, [router]); // Removed authSubscription from deps as it causes loop
+  }, [router]);
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -463,7 +461,7 @@ export default function BudgetFlowPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <Card className="shadow-lg">
-              <CardHeader className="p-4 sm:p-6">
+              <CardHeader className="p-3 sm:p-4 md:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 sm:mb-4">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
@@ -476,41 +474,41 @@ export default function BudgetFlowPage() {
                         <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span>Showing for:</span>
                     </div>
-                    <div className="flex flex-col xs:flex-row gap-2 w-full sm:w-auto">
-                    <Select
-                        value={selectedMonth.toString()}
-                        onValueChange={(value) => setSelectedMonth(parseInt(value))}
-                    >
-                        <SelectTrigger className="w-full xs:w-[120px] h-9 text-xs sm:text-sm">
-                        <SelectValue placeholder="Month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i} value={i.toString()} className="text-xs sm:text-sm">
-                            {format(new Date(selectedYear, i), 'MMMM')}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={selectedYear.toString()}
-                        onValueChange={(value) => setSelectedYear(parseInt(value))}
-                    >
-                        <SelectTrigger className="w-full xs:w-[90px] h-9 text-xs sm:text-sm">
-                        <SelectValue placeholder="Year" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        {availableYears.map(year => (
-                            <SelectItem key={year} value={year.toString()} className="text-xs sm:text-sm">
-                            {year}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="flex flex-row gap-2 w-full sm:w-auto">
+                      <Select
+                          value={selectedMonth.toString()}
+                          onValueChange={(value) => setSelectedMonth(parseInt(value))}
+                      >
+                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[130px] h-9 text-xs sm:text-sm">
+                          <SelectValue placeholder="Month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => (
+                              <SelectItem key={i} value={i.toString()} className="text-xs sm:text-sm">
+                              {format(new Date(selectedYear, i), 'MMMM')}
+                              </SelectItem>
+                          ))}
+                          </SelectContent>
+                      </Select>
+                      <Select
+                          value={selectedYear.toString()}
+                          onValueChange={(value) => setSelectedYear(parseInt(value))}
+                      >
+                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[100px] h-9 text-xs sm:text-sm">
+                          <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {availableYears.map(year => (
+                              <SelectItem key={year} value={year.toString()} className="text-xs sm:text-sm">
+                              {year}
+                              </SelectItem>
+                          ))}
+                          </SelectContent>
+                      </Select>
                     </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-2 sm:p-4 md:p-6 pt-0">
+              <CardContent className="p-2 sm:p-3 md:p-4 pt-0">
                  {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
                     <div className="text-center text-muted-foreground py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
                       <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
@@ -531,7 +529,7 @@ export default function BudgetFlowPage() {
 
           <div className="space-y-4 sm:space-y-6">
              {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
-                <Card className="shadow-lg h-[280px] sm:h-[388px] flex items-center justify-center text-center text-muted-foreground p-4">
+                <Card className="shadow-lg h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-4">
                    <div>
                     <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4 mx-auto" />
                     <p className="text-sm sm:text-base">Your expense chart will appear here.</p>
