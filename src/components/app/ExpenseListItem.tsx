@@ -3,7 +3,7 @@
 
 import { type Expense, type ExpenseCategory, type CurrencyCode } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format as formatDate } from 'date-fns';
+import { format as formatDate, parseISO } from 'date-fns'; // Import parseISO
 import { formatCurrency } from '@/lib/utils';
 import {
   Utensils, Car, Home, Zap, Film, ShoppingBag, Plane, HeartPulse, GraduationCap, MoreHorizontal, CircleDollarSign
@@ -30,6 +30,9 @@ const categoryIcons: Record<ExpenseCategory, React.ElementType> = {
 export default function ExpenseListItem({ expense, currency }: ExpenseListItemProps) {
   const Icon = categoryIcons[expense.category] || CircleDollarSign;
 
+  // Ensure expense.date is a Date object. Supabase might return it as a string.
+  const dateObject = typeof expense.date === 'string' ? parseISO(expense.date) : expense.date;
+
   return (
     <Card className="mb-4 shadow-sm hover:shadow-md transition-shadow duration-200">
       <CardHeader className="pb-2">
@@ -44,7 +47,8 @@ export default function ExpenseListItem({ expense, currency }: ExpenseListItemPr
       <CardContent>
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{expense.category}</span>
-          <span>{formatDate(new Date(expense.date), 'MMM dd, yyyy')}</span>
+          {/* Format the dateObject */}
+          <span>{formatDate(dateObject, 'MMM dd, yyyy')}</span>
         </div>
       </CardContent>
     </Card>

@@ -7,11 +7,21 @@ export const EXPENSE_CATEGORIES = [
 export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
 
 export interface Expense {
-  id: string;
+  id: string; // Will be UUID from Supabase
+  user_id?: string; // Foreign key, useful if passing around, but primarily for DB
   category: ExpenseCategory;
-  date: Date;
+  date: Date; // Stored as DATE in DB, handled as Date object in JS
   description: string;
   amount: number;
+  created_at?: string; // Timestamptz from Supabase
+  updated_at?: string; // Timestamptz from Supabase
+}
+
+export interface Profile {
+  id: string; // UUID, matches auth.users.id
+  budget_threshold: number | null;
+  selected_currency: CurrencyCode;
+  updated_at?: string;
 }
 
 export interface FinancialTip {
