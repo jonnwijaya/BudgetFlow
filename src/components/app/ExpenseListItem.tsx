@@ -1,14 +1,17 @@
+
 'use client';
 
-import { type Expense, type ExpenseCategory } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format } from 'date-fns';
+import { type Expense, type ExpenseCategory, type CurrencyCode } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { format as formatDate } from 'date-fns';
+import { formatCurrency } from '@/lib/utils';
 import {
   Utensils, Car, Home, Zap, Film, ShoppingBag, Plane, HeartPulse, GraduationCap, MoreHorizontal, CircleDollarSign
 } from 'lucide-react';
 
 interface ExpenseListItemProps {
   expense: Expense;
+  currency: CurrencyCode;
 }
 
 const categoryIcons: Record<ExpenseCategory, React.ElementType> = {
@@ -24,7 +27,7 @@ const categoryIcons: Record<ExpenseCategory, React.ElementType> = {
   Other: MoreHorizontal,
 };
 
-export default function ExpenseListItem({ expense }: ExpenseListItemProps) {
+export default function ExpenseListItem({ expense, currency }: ExpenseListItemProps) {
   const Icon = categoryIcons[expense.category] || CircleDollarSign;
 
   return (
@@ -35,13 +38,13 @@ export default function ExpenseListItem({ expense }: ExpenseListItemProps) {
             <Icon className="h-6 w-6 text-primary" />
             <CardTitle className="text-lg font-semibold">{expense.description}</CardTitle>
           </div>
-          <p className="text-xl font-bold text-primary">${expense.amount.toFixed(2)}</p>
+          <p className="text-xl font-bold text-primary">{formatCurrency(expense.amount, currency)}</p>
         </div>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{expense.category}</span>
-          <span>{format(new Date(expense.date), 'MMM dd, yyyy')}</span>
+          <span>{formatDate(new Date(expense.date), 'MMM dd, yyyy')}</span>
         </div>
       </CardContent>
     </Card>

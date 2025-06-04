@@ -1,13 +1,15 @@
+
 'use client';
 
-import { type Expense } from '@/types';
+import { type Expense, type CurrencyCode } from '@/types';
 import ExpenseListItem from './ExpenseListItem';
 
 interface ExpenseListProps {
   expenses: Expense[];
+  currency: CurrencyCode;
 }
 
-export default function ExpenseList({ expenses }: ExpenseListProps) {
+export default function ExpenseList({ expenses, currency }: ExpenseListProps) {
   if (expenses.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8">
@@ -20,7 +22,7 @@ export default function ExpenseList({ expenses }: ExpenseListProps) {
   return (
     <div className="space-y-1">
       {expenses.map(expense => (
-        <ExpenseListItem key={expense.id} expense={expense} />
+        <ExpenseListItem key={expense.id} expense={expense} currency={currency} />
       ))}
     </div>
   );

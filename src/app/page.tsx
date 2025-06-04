@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,9 +13,10 @@ import SetThresholdDialog from '@/components/app/SetThresholdDialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, BarChart3 } from 'lucide-react';
-import { type Expense, type FinancialTip, type ExpenseCategory } from '@/types';
+import { type Expense, type FinancialTip, type CurrencyCode, SUPPORTED_CURRENCIES } from '@/types';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
 
 export default function BudgetFlowPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -22,6 +24,7 @@ export default function BudgetFlowPage() {
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
   const [budgetThreshold, setBudgetThreshold] = useState<number | null>(null);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const { toast } = useToast();
 
   const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -44,7 +47,7 @@ export default function BudgetFlowPage() {
         description: "Could not fetch a new financial tip. Please try again later.",
         variant: "destructive",
       });
-      setFinancialTip(null); // Clear previous tip on error
+      setFinancialTip(null);
     } finally {
       setIsLoadingTip(false);
     }
@@ -57,7 +60,7 @@ export default function BudgetFlowPage() {
   const handleSaveExpense = (newExpenseData: Omit<Expense, 'id'>) => {
     const newExpense: Expense = {
       ...newExpenseData,
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9), // Simple unique ID
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
     };
     setExpenses(prevExpenses => [newExpense, ...prevExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
@@ -67,7 +70,7 @@ export default function BudgetFlowPage() {
       toast({ title: "No Data", description: "No expenses to export.", variant: "default" });
       return;
     }
-    const headers = "ID,Date,Category,Description,Amount\n";
+    const headers = "ID,Date,Category,Description,Amount\n"; // Amounts are currency-agnostic numbers
     const csvContent = expenses.map(e => 
       `${e.id},${e.date.toISOString().split('T')[0]},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)}`
     ).join("\n");
@@ -93,10 +96,15 @@ export default function BudgetFlowPage() {
   const handleSetThreshold = (threshold: number | null) => {
     setBudgetThreshold(threshold);
     if (threshold !== null) {
-      toast({ title: "Budget Set", description: `Budget threshold set to $${threshold.toFixed(2)}.` });
+      toast({ title: "Budget Set", description: `Budget threshold set to ${formatCurrency(threshold, selectedCurrency)}.` });
     } else {
       toast({ title: "Budget Cleared", description: "Budget threshold has been removed." });
     }
+  };
+
+  const handleCurrencyChange = (newCurrency: CurrencyCode) => {
+    setSelectedCurrency(newCurrency);
+    toast({ title: "Currency Updated", description: `Currency changed to ${newCurrency}.`})
   };
   
   return (
@@ -105,6 +113,9 @@ export default function BudgetFlowPage() {
         onAddExpenseClick={() => setIsAddExpenseSheetOpen(true)} 
         totalSpent={totalSpent}
         budgetThreshold={budgetThreshold}
+        selectedCurrency={selectedCurrency}
+        onCurrencyChange={handleCurrencyChange}
+        currencies={SUPPORTED_CURRENCIES}
       />
 
       <main className="flex-grow container mx-auto p-4 md:p-6 space-y-6">
@@ -113,7 +124,7 @@ export default function BudgetFlowPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Budget Exceeded!</AlertTitle>
             <AlertDescription>
-              You have spent ${totalSpent.toFixed(2)}, which is over your budget of ${budgetThreshold?.toFixed(2)}.
+              You have spent {formatCurrency(totalSpent, selectedCurrency)}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
             </AlertDescription>
           </Alert>
         )}
@@ -126,16 +137,16 @@ export default function BudgetFlowPage() {
                   <BarChart3 className="h-6 w-6 text-primary" />
                   <CardTitle className="font-headline">Recent Expenses</CardTitle>
                 </div>
-                <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} />
+                <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />
               </CardHeader>
               <CardContent>
-                <ExpenseList expenses={expenses} />
+                <ExpenseList expenses={expenses} currency={selectedCurrency} />
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-6">
-            <ExpenseChart expenses={expenses} />
+            <ExpenseChart expenses={expenses} currency={selectedCurrency} />
             <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
           </div>
         </div>
@@ -149,7 +160,8 @@ export default function BudgetFlowPage() {
       <AddExpenseSheet 
         isOpen={isAddExpenseSheetOpen} 
         setIsOpen={setIsAddExpenseSheetOpen} 
-        onSaveExpense={handleSaveExpense} 
+        onSaveExpense={handleSaveExpense}
+        currency={selectedCurrency} 
       />
     </div>
   );

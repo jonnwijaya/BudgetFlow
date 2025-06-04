@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
@@ -26,11 +27,11 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
+import { cn, getCurrencySymbol } from '@/lib/utils';
 import { CalendarIcon, Wand2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { EXPENSE_CATEGORIES, type ExpenseCategory, type Expense } from '@/types';
-import { categorizeExpense as categorizeExpenseAI } from '@/ai/flows/categorize-expense'; // Renamed to avoid conflict
+import { EXPENSE_CATEGORIES, type ExpenseCategory, type Expense, type CurrencyCode } from '@/types';
+import { categorizeExpense as categorizeExpenseAI } from '@/ai/flows/categorize-expense';
 import { useToast } from '@/hooks/use-toast';
 
 const expenseSchema = z.object({
@@ -46,9 +47,10 @@ interface AddExpenseSheetProps {
   isOpen: boolean;
   setIsOpen: Dispatch<SetStateAction<boolean>>;
   onSaveExpense: (expense: Omit<Expense, 'id'>) => void;
+  currency: CurrencyCode;
 }
 
-export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: AddExpenseSheetProps) {
+export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense, currency }: AddExpenseSheetProps) {
   const { toast } = useToast();
   const [isCategorizing, setIsCategorizing] = useState(false);
   const form = useForm<ExpenseFormData>({
@@ -61,7 +63,7 @@ export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: Ad
 
   const onSubmit = (data: ExpenseFormData) => {
     onSaveExpense(data);
-    form.reset();
+    form.reset({ date: new Date(), description: '', amount: undefined, category: undefined });
     setIsOpen(false);
     toast({ title: "Expense Added", description: `${data.description} successfully added.` });
   };
@@ -88,7 +90,12 @@ export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: Ad
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+    <Sheet open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (!open) {
+        form.reset({ date: new Date(), description: '', amount: undefined, category: undefined });
+      }
+    }}>
       <SheetContent className="sm:max-w-lg w-[90vw]">
         <SheetHeader>
           <SheetTitle>Add New Expense</SheetTitle>
@@ -98,7 +105,7 @@ export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: Ad
         </SheetHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="amount">Amount ($)</Label>
+            <Label htmlFor="amount">Amount ({getCurrencySymbol(currency)})</Label>
             <Input id="amount" type="number" step="0.01" {...form.register('amount')} placeholder="e.g., 25.99" />
             {form.formState.errors.amount && <p className="text-sm text-destructive">{form.formState.errors.amount.message}</p>}
           </div>
@@ -121,7 +128,7 @@ export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: Ad
               control={form.control}
               name="category"
               render={({ field }) => (
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value || ""} >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
@@ -174,7 +181,7 @@ export default function AddExpenseSheet({ isOpen, setIsOpen, onSaveExpense }: Ad
               <Button type="button" variant="outline">Cancel</Button>
             </SheetClose>
             <Button type="submit" disabled={form.formState.isSubmitting || isCategorizing} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-              {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(form.formState.isSubmitting || isCategorizing) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Expense
             </Button>
           </SheetFooter>

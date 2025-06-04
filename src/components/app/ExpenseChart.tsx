@@ -1,12 +1,15 @@
+
 'use client';
 
-import { type Expense } from '@/types';
+import { type Expense, type CurrencyCode } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { useMemo } from 'react';
+import { formatCurrency } from '@/lib/utils';
 
 interface ExpenseChartProps {
   expenses: Expense[];
+  currency: CurrencyCode;
 }
 
 const COLORS = [
@@ -21,7 +24,7 @@ const COLORS = [
 ];
 
 
-export default function ExpenseChart({ expenses }: ExpenseChartProps) {
+export default function ExpenseChart({ expenses, currency }: ExpenseChartProps) {
   const chartData = useMemo(() => {
     if (!expenses || expenses.length === 0) return [];
     
@@ -64,17 +67,16 @@ export default function ExpenseChart({ expenses }: ExpenseChartProps) {
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={75} // Reduced radius for better fit
+              outerRadius={75}
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
-              // Removed direct label prop to rely on tooltip and legend
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+            <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} iconSize={10} />
           </PieChart>
         </ResponsiveContainer>
