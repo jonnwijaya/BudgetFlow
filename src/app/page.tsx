@@ -15,7 +15,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, BarChart3, CalendarDays, Loader2 } from 'lucide-react';
-import type { Expense, FinancialTip, CurrencyCode, Profile, SUPPORTED_CURRENCIES, ExpenseCategory } from '@/types';
+import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory } from '@/types';
+import { SUPPORTED_CURRENCIES } from '@/types'; // Added import
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet'; // Import form data type
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
@@ -96,19 +97,20 @@ export default function BudgetFlowPage() {
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') { // "No rows found"
-          setBudgetThreshold(null);
-          setSelectedCurrency('USD');
-          // Optionally create a default profile here if desired, but for now, just use defaults
+        if (error.code === 'PGRST116') { // "No rows found" - Profile doesn't exist for this user yet
+          console.log('No profile found for user, using default values.');
+          setBudgetThreshold(null); // Or a default budget if you prefer
+          setSelectedCurrency('USD'); // Default currency
+          // No need to toast for this specific error, as it's a normal case for new users
         } else {
+          // Handle other unexpected errors
           console.error('Error fetching profile:', error);
           toast({ title: 'Profile Load Error', description: `Could not load your profile: ${error.message}`, variant: 'destructive' });
         }
       } else if (data) {
         if (data.is_deactivated) {
-          // This case should ideally be handled at login, but as a safeguard:
           toast({ title: 'Account Deactivated', description: 'This account is deactivated.', variant: 'destructive'});
-          await supabase.auth.signOut(); // Force sign out
+          await supabase.auth.signOut(); 
           router.replace('/login');
           return;
         }
@@ -214,7 +216,7 @@ export default function BudgetFlowPage() {
       if (expenseToEdit) { // UPDATE existing expense
         const { data: updatedExpense, error } = await supabase
           .from('expenses')
-          .update({ ...expenseData, date: formattedDate }) // user_id is not changed, it's part of .eq
+          .update({ ...expenseData, date: formattedDate, updated_at: new Date().toISOString() }) // user_id is not changed, it's part of .eq
           .eq('id', expenseToEdit.id)
           .eq('user_id', user.id) // Security: ensure user owns the expense
           .select()
@@ -360,7 +362,7 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold,
+        budget_threshold: budgetThreshold, // Preserve existing budget threshold
         updated_at: new Date().toISOString(),
       };
 
