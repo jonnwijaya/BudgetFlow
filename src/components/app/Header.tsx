@@ -3,8 +3,9 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2, FilterX } from 'lucide-react';
+import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2, FilterX, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,19 +22,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { type CurrencyCode, type ExpenseCategory } from '@/types';
+import type { CurrencyCode, ExpenseCategory } from '@/types';
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggleButton } from './ThemeToggleButton';
+import { clearLocalData } from '@/lib/localStore';
+
 
 const DeleteAccountDialog = dynamic(() => import('./DeleteAccountDialog'), { ssr: false });
 
 interface HeaderProps {
   user: User | null;
+  appMode: 'guest' | 'authenticated' | 'loading';
   onAddExpenseClick: () => void;
-  totalSpent: number; // This should be the total of currently displayed/filtered expenses
+  totalSpent: number;
   budgetThreshold?: number | null;
   selectedCurrency: CurrencyCode;
   onCurrencyChange: (currencyCode: CurrencyCode) => void;
@@ -44,6 +48,7 @@ interface HeaderProps {
 
 export default function AppHeader({
   user,
+  appMode,
   onAddExpenseClick,
   totalSpent,
   budgetThreshold,
@@ -59,11 +64,12 @@ export default function AppHeader({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null; // Reflects based on displayed total
+  const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null;
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     const { error } = await supabase.auth.signOut();
+    clearLocalData(); // Clear local data on logout
 
     if (error && error.message !== 'Auth session missing!') {
       toast({
@@ -76,7 +82,7 @@ export default function AppHeader({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
-      router.replace('/login'); 
+      router.replace('/login');
     }
     setIsLoggingOut(false);
   };
@@ -97,27 +103,27 @@ export default function AppHeader({
         .delete()
         .eq('user_id', user.id);
 
-      if (expensesError) {
-        console.error("Error deleting user's expenses:", expensesError);
-        throw new Error(`Failed to delete expenses: ${expensesError.message}`);
-      }
-      console.log("User's expenses deleted.");
+      if (expensesError) throw new Error(`Failed to delete expenses: ${expensesError.message}`);
+
+      const { error: goalsError } = await supabase
+        .from('savings_goals')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (goalsError) throw new Error(`Failed to delete savings goals: ${goalsError.message}`);
 
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ is_deactivated: true, updated_at: new Date().toISOString() })
         .eq('id', user.id);
-      
-      if (profileError) {
-        console.error("Error deactivating user's profile:", profileError);
-        throw new Error(`Failed to deactivate profile: ${profileError.message}`);
-      }
-      console.log("User's profile deactivated.");
-      
+
+      if (profileError) throw new Error(`Failed to deactivate profile: ${profileError.message}`);
+
       const { error: signOutError } = await supabase.auth.signOut();
+      clearLocalData(); // Clear local data on account deletion too
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
-        toast({
+         toast({
           title: "Data Cleared, Logout Issue",
           description: `Your data was cleared and account deactivated, but sign out failed: ${signOutError.message}. Please try logging out manually.`,
           variant: "destructive",
@@ -126,10 +132,9 @@ export default function AppHeader({
         toast({
           title: "Account Data Cleared & Deactivated",
           description: "Your application data has been cleared, and account access has been revoked. You have been signed out.",
-          variant: "default",
         });
       }
-      router.replace('/login'); 
+      router.replace('/login');
 
     } catch (e: any) {
       toast({
@@ -153,7 +158,7 @@ export default function AppHeader({
             <h1 className="text-lg sm:text-xl font-headline font-bold text-primary">BudgetFlow</h1>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
-            {user && (
+            {(appMode === 'authenticated' || appMode === 'guest') && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
                   <SelectTrigger className="w-auto min-w-[40px] sm:min-w-[50px] text-xs sm:text-sm h-8 sm:h-9 px-1.5 sm:px-2">
@@ -169,7 +174,7 @@ export default function AppHeader({
                     ))}
                   </SelectContent>
                 </Select>
-                
+
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">{selectedPieCategory ? 'Filtered' : 'Spent'}</p>
                   <p className="text-sm font-semibold">
@@ -209,10 +214,10 @@ export default function AppHeader({
                 </Button>
               </>
             )}
-            
+
             <ThemeToggleButton />
 
-            {user ? (
+            {appMode === 'authenticated' && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 sm:h-10 sm:w-10 shrink-0" aria-label="Open user menu">
@@ -244,13 +249,26 @@ export default function AppHeader({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            ) : appMode === 'guest' ? (
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button asChild variant="outline" size="sm" className="h-9 text-xs sm:text-sm">
+                  <Link href="/login">
+                    <LogIn className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5"/> Login
+                  </Link>
+                </Button>
+                <Button asChild variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground h-9 text-xs sm:text-sm">
+                  <Link href="/register">
+                   <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5"/> Sign Up
+                  </Link>
+                </Button>
+              </div>
             ) : (
-               null 
+              appMode === 'loading' && <Loader2 className="h-6 w-6 animate-spin text-primary" />
             )}
           </div>
         </div>
       </header>
-      {user && isDeleteDialogOpen && (
+      {user && appMode === 'authenticated' && isDeleteDialogOpen && (
         <DeleteAccountDialog
           isOpen={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}

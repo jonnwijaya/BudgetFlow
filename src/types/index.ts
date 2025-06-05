@@ -9,26 +9,32 @@ export const EXPENSE_CATEGORIES = [
 export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
 
 export interface Expense {
-  id: string; 
-  user_id: string; 
+  id: string;
+  user_id: string; // Can be 'guest-user' for local data
   category: ExpenseCategory;
-  date: Date; 
+  date: Date;
   description: string;
   amount: number;
-  created_at: string; 
-  updated_at: string; 
-  // recurring_expense_id and is_auto_generated are removed as they relate to recurring expenses
+  created_at: string; // ISO string
+  updated_at: string; // ISO string
 }
 
 export interface Profile {
-  id: string; 
+  id: string; // Supabase user ID or a guest identifier
   budget_threshold: number | null;
   selected_currency: CurrencyCode;
-  is_deactivated: boolean; 
+  is_deactivated?: boolean; // Relevant for Supabase users
   updated_at?: string;
-  last_login_at?: string | null; // ISO string
+  last_login_at?: string | null;
   login_streak_days?: number;
 }
+
+// Specific type for settings stored locally for guests or synced for users
+export interface UserProfileSettings {
+  budget_threshold: number | null;
+  selected_currency: CurrencyCode;
+}
+
 
 export interface FinancialTip {
   tip: string;
@@ -45,7 +51,6 @@ export const SUPPORTED_CURRENCIES = [
 
 export type CurrencyCode = typeof SUPPORTED_CURRENCIES[number]['code'];
 
-// Achievements
 export const ACHIEVEMENT_KEYS = {
   LOGIN_STREAK_7_DAYS: 'LOGIN_STREAK_7_DAYS',
   UNDER_BUDGET_ONE_MONTH: 'UNDER_BUDGET_ONE_MONTH',
@@ -57,25 +62,24 @@ export interface Achievement {
   key: AchievementKey;
   name: string;
   description: string;
-  icon: LucideIcon; 
+  icon: LucideIcon;
 }
 
 export interface UserAchievement {
   id: string;
   user_id: string;
   achievement_key: AchievementKey;
-  unlocked_at: string; // ISO string
+  unlocked_at: string;
   metadata?: Record<string, any>;
 }
 
-// Savings Goals
 export interface SavingsGoal {
   id: string;
-  user_id: string;
+  user_id: string; // Can be 'guest-user' for local data
   goal_name: string;
   target_amount: number;
   current_amount: number;
-  target_date: Date | null; // Can be string from DB, convert to Date
-  created_at: string;
-  updated_at: string;
+  target_date: Date | null;
+  created_at: string; // ISO string
+  updated_at: string; // ISO string
 }
