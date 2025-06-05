@@ -5,6 +5,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { ThemeProvider } from 'next-themes';
 
 const ptSans = PT_Sans({
   subsets: ['latin'],
@@ -18,9 +19,9 @@ export const metadata: Metadata = {
   title: 'BudgetFlow - Smart Expense Tracking & Financial Insights',
   description: 'Effortlessly manage your personal finances with BudgetFlow. Track expenses, set budgets, get AI-powered financial tips, and gain insights into your spending habits. Take control of your money today!',
   keywords: 'budgeting, expense tracker, personal finance, money management, financial planning, savings, AI finance, smart budget, budget app',
-  themeColor: [ // Added theme-color
-    { media: '(prefers-color-scheme: light)', color: '#F0F4F7' }, // Matches --background light
-    { media: '(prefers-color-scheme: dark)', color: '#26292B' }, // Matches --background dark (approx.)
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F0F4F7' }, 
+    { media: '(prefers-color-scheme: dark)', color: '#26292B' },
   ],
 };
 
@@ -32,15 +33,21 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={ptSans.variable}>
       <head>
-        {/* Viewport is automatically handled by Next.js, but you can add specific viewport settings here if needed */}
+        {/* Viewport is automatically handled by Next.js */}
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
-        {children}
-        <Toaster />
-        <Analytics />
-        <SpeedInsights />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+          <Analytics />
+          <SpeedInsights />
+        </ThemeProvider>
       </body>
     </html>
   );
 }
-
