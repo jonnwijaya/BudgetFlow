@@ -7,17 +7,17 @@ import dynamic from 'next/dynamic';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
 import ExpenseList from '@/components/app/ExpenseList';
-import SavingsGoalList from '@/components/app/SavingsGoalList'; // New import
+import SavingsGoalList from '@/components/app/SavingsGoalList';
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from '@/components/ui/button'; // New import
-import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle } from 'lucide-react'; // Added PiggyBank, PlusCircle
-import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal } from '@/types'; // Added SavingsGoal
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle } from 'lucide-react';
+import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal } from '@/types';
 import { SUPPORTED_CURRENCIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
-import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet'; // New import
+import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
@@ -32,7 +32,11 @@ const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet')
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" /> 
 });
-const AddSavingsGoalSheet = dynamic(() => import('@/components/app/AddSavingsGoalSheet'), { // New dynamic import
+const AddSavingsGoalSheet = dynamic(() => import('@/components/app/AddSavingsGoalSheet'), {
+  ssr: false,
+  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
+});
+const AddFundsToGoalSheet = dynamic(() => import('@/components/app/AddFundsToGoalSheet'), { // New dynamic import
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
 });
@@ -66,7 +70,7 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
 });
 const SetThresholdDialog = dynamic(() => import('@/components/app/SetThresholdDialog'), { ssr: false });
 const DeleteExpenseDialog = dynamic(() => import('@/components/app/DeleteExpenseDialog'), { ssr: false });
-const DeleteSavingsGoalDialog = dynamic(() => import('@/components/app/DeleteSavingsGoalDialog'), { ssr: false }); // New dynamic import
+const DeleteSavingsGoalDialog = dynamic(() => import('@/components/app/DeleteSavingsGoalDialog'), { ssr: false });
 
 
 export default function BudgetFlowPage() {
@@ -78,9 +82,13 @@ export default function BudgetFlowPage() {
 
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]); // New state for savings goals
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
-  const [isAddSavingsGoalSheetOpen, setIsAddSavingsGoalSheetOpen] = useState(false); // New state
+  const [isAddSavingsGoalSheetOpen, setIsAddSavingsGoalSheetOpen] = useState(false);
+  const [isAddFundsSheetOpen, setIsAddFundsSheetOpen] = useState(false); // New state
+  const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null); // New state
+
+
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
 
@@ -91,12 +99,12 @@ export default function BudgetFlowPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
-  const [goalToEdit, setGoalToEdit] = useState<SavingsGoal | null>(null); // New state
+  const [goalToEdit, setGoalToEdit] = useState<SavingsGoal | null>(null);
   const [isDeleteExpenseDialogOpen, setIsDeleteExpenseDialogOpen] = useState(false);
-  const [isDeleteSavingsGoalDialogOpen, setIsDeleteSavingsGoalDialogOpen] = useState(false); // New state
+  const [isDeleteSavingsGoalDialogOpen, setIsDeleteSavingsGoalDialogOpen] = useState(false);
   const [expenseIdToDelete, setExpenseIdToDelete] = useState<string | null>(null);
-  const [goalIdToDelete, setGoalIdToDelete] = useState<string | null>(null); // New state
-  const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined); // New state for dialog message
+  const [goalIdToDelete, setGoalIdToDelete] = useState<string | null>(null);
+  const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined);
 
   const { toast } = useToast();
 
@@ -197,7 +205,7 @@ export default function BudgetFlowPage() {
     }
   }, [toast]);
 
-  const fetchSavingsGoals = useCallback(async (userId: string) => { // New fetch function
+  const fetchSavingsGoals = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('savings_goals')
       .select('*')
@@ -220,13 +228,13 @@ export default function BudgetFlowPage() {
       Promise.all([
         fetchProfile(user.id),
         fetchExpenses(user.id),
-        fetchSavingsGoals(user.id), // Fetch savings goals
+        fetchSavingsGoals(user.id),
       ]).finally(() => {
         if (isDataEffectMounted) setIsLoadingData(false);
       });
     } else if (!isLoadingAuth && !user) {
       setExpenses([]);
-      setSavingsGoals([]); // Clear savings goals
+      setSavingsGoals([]);
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
       setFinancialTip(null);
@@ -346,7 +354,7 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast, expenseToEdit]);
 
-  const handleSaveSavingsGoal = useCallback(async (goalData: SavingsGoalFormData, goalId?: string) => { // New save function
+  const handleSaveSavingsGoal = useCallback(async (goalData: SavingsGoalFormData, goalId?: string) => {
     if (!user) {
       toast({ title: "Error", description: "You must be logged in to save a savings goal.", variant: "destructive" });
       return;
@@ -358,10 +366,10 @@ export default function BudgetFlowPage() {
         user_id: user.id,
       };
 
-      if (goalId) { // Editing existing goal
+      if (goalId) { 
         const { data: updatedGoal, error } = await supabase
           .from('savings_goals')
-          .update(dataToSave) // Supabase automatically handles updated_at via trigger
+          .update(dataToSave)
           .eq('id', goalId)
           .eq('user_id', user.id)
           .select()
@@ -378,7 +386,7 @@ export default function BudgetFlowPage() {
           toast({ title: "Savings Goal Updated", description: `${updatedGoal.goal_name} successfully updated.` });
         }
         setGoalToEdit(null);
-      } else { // Adding new goal
+      } else { 
         const { data: savedGoal, error } = await supabase
           .from('savings_goals')
           .insert([dataToSave])
@@ -401,12 +409,61 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast]);
 
+  const handleOpenAddFundsSheet = useCallback((goal: SavingsGoal) => {
+    setGoalToAddTo(goal);
+    setIsAddFundsSheetOpen(true);
+  }, []);
+
+  const handleSaveAddedFunds = useCallback(async (goalId: string, amountToAdd: number) => {
+    if (!user) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    try {
+      // Fetch the current goal to ensure we have the latest current_amount
+      const { data: currentGoalData, error: fetchError } = await supabase
+        .from('savings_goals')
+        .select('current_amount, target_amount')
+        .eq('id', goalId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!currentGoalData) throw new Error("Goal not found.");
+
+      const newCurrentAmount = Math.min(currentGoalData.current_amount + amountToAdd, currentGoalData.target_amount);
+
+      const { data: updatedGoal, error: updateError } = await supabase
+        .from('savings_goals')
+        .update({ current_amount: newCurrentAmount })
+        .eq('id', goalId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      
+      if (updateError) throw updateError;
+
+      if (updatedGoal) {
+        setSavingsGoals(prevGoals =>
+          prevGoals.map(g =>
+            g.id === updatedGoal.id ? { ...updatedGoal, target_date: updatedGoal.target_date ? parseISO(updatedGoal.target_date) : null } as SavingsGoal : g
+          ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        );
+        toast({ title: "Funds Added", description: `${formatCurrency(amountToAdd, selectedCurrency)} added to "${updatedGoal.goal_name}".` });
+      }
+    } catch (error: any) {
+      console.error("Failed to add funds to savings goal:", error);
+      toast({ title: "Update Error", description: error.message || "Could not add funds to goal.", variant: "destructive" });
+    }
+  }, [user, toast, selectedCurrency]);
+
+
   const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
     setIsAddExpenseSheetOpen(true);
   }, []);
 
-  const handleEditGoalClick = useCallback((goal: SavingsGoal) => { // New edit click handler
+  const handleEditGoalClick = useCallback((goal: SavingsGoal) => {
     setGoalToEdit(goal);
     setIsAddSavingsGoalSheetOpen(true);
   }, []);
@@ -416,7 +473,7 @@ export default function BudgetFlowPage() {
     setIsDeleteExpenseDialogOpen(true);
   }, []);
 
-  const handleDeleteGoalClick = useCallback((goal: SavingsGoal) => { // New delete click handler
+  const handleDeleteGoalClick = useCallback((goal: SavingsGoal) => {
     setGoalIdToDelete(goal.id);
     setGoalNameToDelete(goal.goal_name);
     setIsDeleteSavingsGoalDialogOpen(true);
@@ -447,7 +504,7 @@ export default function BudgetFlowPage() {
     }
   }, [user, expenseIdToDelete, toast]);
 
-  const confirmDeleteSavingsGoal = useCallback(async () => { // New confirm delete function
+  const confirmDeleteSavingsGoal = useCallback(async () => {
     if (!user || !goalIdToDelete) {
       toast({ title: "Error", description: "User or goal ID missing.", variant: "destructive" });
       return;
@@ -586,7 +643,7 @@ export default function BudgetFlowPage() {
         currencies={SUPPORTED_CURRENCIES}
       />
 
-      <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 md:space-y-6">
+      <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 space-y-3 sm:space-y-4">
         {budgetExceeded && (
           <Alert variant="destructive" className="shadow-md">
             <AlertTriangle className="h-4 w-4" />
@@ -597,28 +654,28 @@ export default function BudgetFlowPage() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-          <div className="lg:col-span-2 space-y-3 sm:space-y-4 md:space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="lg:col-span-2 space-y-3 sm:space-y-4">
             <Card className="shadow-lg">
-              <CardHeader className="p-3 sm:p-4 md:p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 md:mb-4">
+              <CardHeader className="p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3">
                   <div className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                    <CardTitle><h2 className="font-headline text-base sm:text-lg md:text-xl">Recent Expenses</h2></CardTitle>
+                    <BarChart3 className="h-5 w-5 sm:h-6 text-primary" />
+                    <CardTitle><h2 className="font-headline text-base sm:text-lg">Recent Expenses</h2></CardTitle>
                   </div>
                   {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
                 </div>
-                <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2">
+                <div className="flex flex-row items-center gap-2">
                     <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground shrink-0">
-                        <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        <span>Showing for:</span>
+                        <CalendarDays className="h-3.5 w-3.5 sm:h-4" />
+                        <span>For:</span>
                     </div>
-                    <div className="flex flex-row gap-2 w-full xs:w-auto">
+                    <div className="flex flex-row gap-2 w-full">
                       <Select
                           value={selectedMonth.toString()}
                           onValueChange={(value) => setSelectedMonth(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Month" />
                           </SelectTrigger>
                           <SelectContent>
@@ -633,7 +690,7 @@ export default function BudgetFlowPage() {
                           value={selectedYear.toString()}
                           onValueChange={(value) => setSelectedYear(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Year" />
                           </SelectTrigger>
                           <SelectContent>
@@ -647,7 +704,7 @@ export default function BudgetFlowPage() {
                     </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-1.5 xs:p-2 sm:p-3 md:p-4 pt-0">
+              <CardContent className="p-1.5 xs:p-2 sm:p-3 pt-0">
                  {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
                     <div className="text-center text-muted-foreground py-4 xs:py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
                       <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4" />
@@ -665,14 +722,13 @@ export default function BudgetFlowPage() {
               </CardContent>
             </Card>
             
-            {/* Savings Goals Section */}
             {user && (
               <Card className="shadow-lg">
-                <CardHeader className="p-3 sm:p-4 md:p-6">
+                <CardHeader className="p-3 sm:p-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <PiggyBank className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                      <CardTitle><h2 className="font-headline text-base sm:text-lg md:text-xl">Savings Goals</h2></CardTitle>
+                      <PiggyBank className="h-5 w-5 sm:h-6 text-primary" />
+                      <CardTitle><h2 className="font-headline text-base sm:text-lg">Savings Goals</h2></CardTitle>
                     </div>
                     <Button 
                       variant="outline" 
@@ -681,32 +737,33 @@ export default function BudgetFlowPage() {
                         setGoalToEdit(null);
                         setIsAddSavingsGoalSheetOpen(true);
                       }}
-                      className="mt-2 sm:mt-0"
+                      className="mt-2 sm:mt-0 h-8 sm:h-9 text-xs sm:text-sm"
                     >
-                      <PlusCircle className="mr-1.5 h-4 w-4" /> Add Goal
+                      <PlusCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Add Goal
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="p-1.5 xs:p-2 sm:p-3 md:p-4">
+                <CardContent className="p-1.5 xs:p-2 sm:p-3">
                   <SavingsGoalList
                     goals={savingsGoals}
                     currency={selectedCurrency}
                     onEditGoal={handleEditGoalClick}
                     onDeleteGoal={(goalId) => {
                         const goal = savingsGoals.find(g => g.id === goalId);
-                        handleDeleteGoalClick(goal!); // Pass the full goal object
+                        if(goal) handleDeleteGoalClick(goal);
                     }}
                     onAddGoalClick={() => {
                         setGoalToEdit(null);
                         setIsAddSavingsGoalSheetOpen(true);
                     }}
+                    onAddFundsToGoal={handleOpenAddFundsSheet}
                   />
                 </CardContent>
               </Card>
             )}
           </div>
 
-          <div className="space-y-3 sm:space-y-4 md:space-y-6">
+          <div className="space-y-3 sm:space-y-4">
              {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
                 <Card className="shadow-lg h-[200px] xs:h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-3 sm:p-4">
                    <div>
@@ -738,7 +795,7 @@ export default function BudgetFlowPage() {
           expenseToEdit={expenseToEdit}
         />
       )}
-      {user && isAddSavingsGoalSheetOpen && ( // Add Savings Goal Sheet
+      {user && isAddSavingsGoalSheetOpen && (
         <AddSavingsGoalSheet
           isOpen={isAddSavingsGoalSheetOpen}
           setIsOpen={(isOpen) => {
@@ -752,6 +809,20 @@ export default function BudgetFlowPage() {
           goalToEdit={goalToEdit}
         />
       )}
+      {user && isAddFundsSheetOpen && (
+        <AddFundsToGoalSheet
+          isOpen={isAddFundsSheetOpen}
+          setIsOpen={(isOpen) => {
+            setIsAddFundsSheetOpen(isOpen);
+            if(!isOpen) {
+              setGoalToAddTo(null);
+            }
+          }}
+          onSaveFunds={handleSaveAddedFunds}
+          goal={goalToAddTo}
+          currency={selectedCurrency}
+        />
+      )}
       {user && isDeleteExpenseDialogOpen && (
         <DeleteExpenseDialog
           isOpen={isDeleteExpenseDialogOpen}
@@ -760,7 +831,7 @@ export default function BudgetFlowPage() {
           itemName="this expense"
         />
       )}
-      {user && isDeleteSavingsGoalDialogOpen && ( // Delete Savings Goal Dialog
+      {user && isDeleteSavingsGoalDialogOpen && (
          <DeleteSavingsGoalDialog
             isOpen={isDeleteSavingsGoalDialogOpen}
             onOpenChange={setIsDeleteSavingsGoalDialogOpen}
@@ -771,3 +842,4 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
+

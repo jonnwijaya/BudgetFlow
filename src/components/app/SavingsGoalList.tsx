@@ -12,9 +12,10 @@ interface SavingsGoalListProps {
   onEditGoal: (goal: SavingsGoal) => void;
   onDeleteGoal: (goalId: string) => void;
   onAddGoalClick: () => void;
+  onAddFundsToGoal: (goal: SavingsGoal) => void; // New prop
 }
 
-export default function SavingsGoalList({ goals, currency, onEditGoal, onDeleteGoal, onAddGoalClick }: SavingsGoalListProps) {
+export default function SavingsGoalList({ goals, currency, onEditGoal, onDeleteGoal, onAddGoalClick, onAddFundsToGoal }: SavingsGoalListProps) {
   if (goals.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-6 sm:py-8 flex flex-col items-center justify-center border-2 border-dashed rounded-lg min-h-[150px] sm:min-h-[200px]">
@@ -30,7 +31,7 @@ export default function SavingsGoalList({ goals, currency, onEditGoal, onDeleteG
   }
 
   return (
-    <div className="space-y-2 sm:space-y-3">
+    <div className="space-y-1.5 sm:space-y-2">
       {goals.map(goal => (
         <SavingsGoalItem
           key={goal.id}
@@ -38,8 +39,10 @@ export default function SavingsGoalList({ goals, currency, onEditGoal, onDeleteG
           currency={currency}
           onEdit={onEditGoal}
           onDelete={onDeleteGoal}
+          onAddFunds={onAddFundsToGoal} // Pass down the handler
         />
       ))}
     </div>
   );
 }
+
