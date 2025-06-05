@@ -16,7 +16,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import type { Subscription, Session } from '@supabase/supabase-js';
+import type { Subscription, Session, User } from '@supabase/supabase-js';
+import type { Profile } from '@/types';
+import { checkAndAwardLoginStreak } from '@/lib/achievementsHelper';
+import { parseISO, format } from 'date-fns';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -33,58 +36,82 @@ export default function LoginPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
 
+  const handleSuccessfulLogin = useCallback(async (sessionUser: User) => {
+    try {
+      // Fetch profile to get current streak and last login
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, last_login_at, login_streak_days, is_deactivated, budget_threshold, selected_currency') // Select all needed fields
+        .eq('id', sessionUser.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows found
+        throw profileError;
+      }
+      
+      if (profile?.is_deactivated) {
+        await supabase.auth.signOut();
+        toast({
+          title: 'Account Deactivated',
+          description: 'This account has been deactivated and cannot be accessed.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        setIsCheckingAuth(false); // Allow showing login form again
+        return false; // Not authenticated
+      }
+      
+      // If profile doesn't exist, create it (or ensure it's handled if first login)
+      let currentProfile = profile;
+      if (!profile) {
+         const { data: newProfileData, error: newProfileError } = await supabase
+          .from('profiles')
+          .insert({ 
+            id: sessionUser.id, 
+            // Set defaults for new profile
+            budget_threshold: null,
+            selected_currency: 'USD',
+            is_deactivated: false,
+            last_login_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            login_streak_days: 1
+          })
+          .select()
+          .single();
+        if (newProfileError) throw newProfileError;
+        currentProfile = newProfileData as Profile;
+      }
+
+
+      if (currentProfile) {
+         // Check and award login streak achievement
+        await checkAndAwardLoginStreak(sessionUser, currentProfile, toast);
+      }
+      return true; // Authenticated
+
+    } catch (error: any) {
+      console.error('Error during post-login processing:', error);
+      toast({
+        title: 'Login Error',
+        description: error.message || 'Could not complete login process.',
+        variant: 'destructive',
+      });
+      await supabase.auth.signOut(); // Sign out if post-login failed
+      setIsLoading(false);
+      setIsCheckingAuth(false);
+      return false; // Not authenticated
+    }
+  }, [toast]);
+
+
   const checkSessionAndDeactivation = useCallback(async (currentSession: Session | null, showDeactivatedToast = true) => {
     if (currentSession) {
-      setIsLoading(true);
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('is_deactivated')
-          .eq('id', currentSession.user.id)
-          .single();
-
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Error fetching profile for deactivation check:', profileError);
-          await supabase.auth.signOut();
-          if (showDeactivatedToast) {
-            toast({
-              title: 'Error',
-              description: 'Could not verify account status. Please try logging in again.',
-              variant: 'destructive',
-            });
-          }
-          return false;
-        }
-
-        if (profile?.is_deactivated) {
-          await supabase.auth.signOut();
-          if (showDeactivatedToast) {
-            toast({
-              title: 'Account Deactivated',
-              description: 'This account has been deactivated and cannot be accessed.',
-              variant: 'destructive',
-            });
-          }
-          return false;
-        }
-        return true; 
-      } catch (e: any) {
-        console.error("Unexpected error checking deactivation status:", e);
-        await supabase.auth.signOut();
-        if (showDeactivatedToast) {
-          toast({
-            title: 'Login Error',
-            description: 'An unexpected error occurred. Please try again.',
-            variant: 'destructive',
-          });
-        }
-        return false;
-      } finally {
-        // setIsLoading(false); // This isLoading is for the login form submission
-      }
+      // This function is now simpler as detailed deactivation check is in handleSuccessfulLogin
+      // It primarily exists to quickly redirect if a session is found.
+      // The detailed check happens on SIGNED_IN or initial load with session.
+      return true; 
     }
-    return true; 
-  }, [router, toast]);
+    return true; // No session means not deactivated in this context
+  }, []);
 
 
   useEffect(() => {
@@ -95,12 +122,12 @@ export default function LoginPage() {
       if (!isMounted) return;
 
       if (session) {
-        const stillAuthenticated = await checkSessionAndDeactivation(session, false);
+        const stillAuthenticated = await handleSuccessfulLogin(session.user);
         if (isMounted) {
           if (stillAuthenticated) {
             router.replace('/');
           } else {
-            setIsCheckingAuth(false);
+            setIsCheckingAuth(false); // If login handling failed, stay on login
           }
         }
       } else {
@@ -118,7 +145,7 @@ export default function LoginPage() {
       
       if (event === 'SIGNED_IN' && session) {
         setIsLoading(true); 
-        const stillAuthenticated = await checkSessionAndDeactivation(session, true);
+        const stillAuthenticated = await handleSuccessfulLogin(session.user);
         if (isMounted) {
           if (stillAuthenticated) {
             router.replace('/');
@@ -138,7 +165,7 @@ export default function LoginPage() {
       isMounted = false;
       subscription?.unsubscribe();
     };
-  }, [checkSessionAndDeactivation, router]);
+  }, [handleSuccessfulLogin, router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -160,6 +187,7 @@ export default function LoginPage() {
       if (error) {
         throw error;
       }
+      // Success will be handled by onAuthStateChange SIGNED_IN event
     } catch (error: any) {
       toast({
         title: 'Login Failed',

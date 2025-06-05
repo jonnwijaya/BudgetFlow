@@ -21,11 +21,13 @@ import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
+import { checkAndAwardUnderBudgetMonth } from '@/lib/achievementsHelper';
+
 
 // Dynamically import components
 const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet'), {
   ssr: false,
-  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" /> // Minimal overlay
+  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" /> 
 });
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
@@ -47,7 +49,7 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
   loading: () => (
      <Card className="shadow-lg">
       <CardHeader className="p-3 sm:p-4">
-          <CardTitle className="font-headline text-accent text-base sm:text-xl"><h2>Smart Financial Tip</h2></CardTitle>
+          <CardTitle><h2 className="font-headline text-accent text-base sm:text-xl">Smart Financial Tip</h2></CardTitle>
       </CardHeader>
       <CardContent className="h-12 sm:h-16 flex items-center justify-center">
         <Loader2 className="h-5 w-5 sm:h-6 animate-spin text-muted-foreground" />
@@ -123,7 +125,7 @@ export default function BudgetFlowPage() {
       isMounted = false;
       authSubscription?.unsubscribe();
     };
-  }, [router]);
+  }, [router]); // authSubscription removed from deps as it's set inside
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -136,13 +138,16 @@ export default function BudgetFlowPage() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('budget_threshold, selected_currency, is_deactivated')
+        .select('budget_threshold, selected_currency, is_deactivated, last_login_at, login_streak_days')
         .eq('id', userId)
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          console.log('No profile found for user, using default values.');
+        if (error.code === 'PGRST116') { // No profile found
+          console.log('No profile found for user, attempting to create one or using defaults.');
+          // Attempt to create profile or use default if this is part of a first-login flow
+          // For now, just set defaults client-side if no profile.
+          // A more robust solution would create the profile server-side or on user creation.
           setBudgetThreshold(null);
           setSelectedCurrency('USD');
         } else {
@@ -158,6 +163,7 @@ export default function BudgetFlowPage() {
         }
         setBudgetThreshold(data.budget_threshold);
         setSelectedCurrency((data.selected_currency as CurrencyCode) || 'USD');
+        // Profile data like last_login_at, login_streak_days are now available if needed elsewhere
       }
     } catch (e: any) {
         console.error("Unexpected error in fetchProfile:", e);
@@ -206,6 +212,9 @@ export default function BudgetFlowPage() {
     const yearsFromExpenses = new Set(expenses.map(exp => new Date(exp.date).getFullYear()));
     const currentYear = new Date().getFullYear();
     yearsFromExpenses.add(currentYear);
+    // Add previous year and next year if not present, for easier navigation
+    yearsFromExpenses.add(currentYear - 1);
+    yearsFromExpenses.add(currentYear + 1);
     return Array.from(yearsFromExpenses).sort((a, b) => b - a);
   }, [expenses]);
 
@@ -218,6 +227,21 @@ export default function BudgetFlowPage() {
 
   const totalSpent = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
+
+  // Achievement Check for "Under Budget Month"
+  useEffect(() => {
+    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0) { // Ensure data is loaded and there are expenses
+      checkAndAwardUnderBudgetMonth(
+        user,
+        totalSpent,
+        budgetThreshold,
+        selectedMonth,
+        selectedYear,
+        toast
+      );
+    }
+  }, [user, isLoadingData, filteredExpenses, totalSpent, budgetThreshold, selectedMonth, selectedYear, toast]);
+
 
   const fetchNewTip = useCallback(async () => {
     if (!user || isLoadingData || isLoadingAuth) return;
@@ -233,17 +257,17 @@ export default function BudgetFlowPage() {
     } catch (error) {
       console.error("Error fetching financial tip:", error);
       setFinancialTip(null);
-      toast({ title: "Tip Error", description: "Could not fetch a new financial tip.", variant: "default" });
+      // toast({ title: "Tip Error", description: "Could not fetch a new financial tip.", variant: "default" }); // Toast can be noisy
     } finally {
       setIsLoadingTip(false);
     }
-  }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData, isLoadingAuth, toast]);
+  }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData, isLoadingAuth]);
 
   useEffect(() => {
     if (user && !isLoadingData && !isLoadingAuth) {
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData, isLoadingAuth]);
+  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]); // Re-fetch tip if month/year changes
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
@@ -370,13 +394,13 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         budget_threshold: newThreshold,
-        selected_currency: selectedCurrency,
+        // selected_currency: selectedCurrency, // Keep existing currency
         updated_at: new Date().toISOString(),
       };
 
       const { error } = await supabase
         .from('profiles')
-        .upsert(profileDataToUpsert, { onConflict: 'id' })
+        .upsert(profileDataToUpsert, { onConflict: 'id' }) // onConflict ensures it updates if exists, inserts if not
         .select()
         .single();
 
@@ -403,7 +427,7 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold, // Preserve existing budget threshold
+        // budget_threshold: budgetThreshold, // Preserve existing budget threshold
         updated_at: new Date().toISOString(),
       };
 
@@ -421,7 +445,7 @@ export default function BudgetFlowPage() {
       console.error("Failed to update currency:", error);
       toast({ title: "Update Error", description: error.message || "Could not update currency.", variant: "destructive" });
     }
-  }, [user, budgetThreshold, toast]);
+  }, [user, toast]);
 
   if (isLoadingAuth || (user && isLoadingData)) {
     return (
@@ -447,7 +471,7 @@ export default function BudgetFlowPage() {
         currencies={SUPPORTED_CURRENCIES}
       />
 
-      <main className="flex-grow container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+      <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 md:space-y-6">
         {budgetExceeded && (
           <Alert variant="destructive" className="shadow-md">
             <AlertTriangle className="h-4 w-4" />
@@ -458,28 +482,28 @@ export default function BudgetFlowPage() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+          <div className="lg:col-span-2 space-y-3 sm:space-y-4 md:space-y-6">
             <Card className="shadow-lg">
               <CardHeader className="p-3 sm:p-4 md:p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 md:mb-4">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                    <CardTitle><h2 className="font-headline text-lg sm:text-xl">Recent Expenses</h2></CardTitle>
+                    <CardTitle><h2 className="font-headline text-base sm:text-lg md:text-xl">Recent Expenses</h2></CardTitle>
                   </div>
                   {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                    <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2">
+                    <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground shrink-0">
                         <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span>Showing for:</span>
                     </div>
-                    <div className="flex flex-row gap-2 w-full sm:w-auto">
+                    <div className="flex flex-row gap-2 w-full xs:w-auto">
                       <Select
                           value={selectedMonth.toString()}
                           onValueChange={(value) => setSelectedMonth(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[130px] h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-0 xs:basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Month" />
                           </SelectTrigger>
                           <SelectContent>
@@ -494,7 +518,7 @@ export default function BudgetFlowPage() {
                           value={selectedYear.toString()}
                           onValueChange={(value) => setSelectedYear(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[100px] h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-0 xs:basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Year" />
                           </SelectTrigger>
                           <SelectContent>
@@ -508,12 +532,12 @@ export default function BudgetFlowPage() {
                     </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-2 sm:p-3 md:p-4 pt-0">
+              <CardContent className="p-1.5 xs:p-2 sm:p-3 md:p-4 pt-0">
                  {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
-                    <div className="text-center text-muted-foreground py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
-                      <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
-                      <p className="text-sm sm:text-lg font-semibold">No expenses for this period.</p>
-                      <p className="text-xs sm:text-sm">Add expenses or change the date.</p>
+                    <div className="text-center text-muted-foreground py-4 xs:py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
+                      <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4" />
+                      <p className="text-xs xs:text-sm sm:text-lg font-semibold">No expenses for this period.</p>
+                      <p className="text-[10px] xs:text-xs sm:text-sm">Add expenses or change the date.</p>
                     </div>
                   ) : (
                     <ExpenseList
@@ -527,12 +551,12 @@ export default function BudgetFlowPage() {
             </Card>
           </div>
 
-          <div className="space-y-4 sm:space-y-6">
+          <div className="space-y-3 sm:space-y-4 md:space-y-6">
              {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
-                <Card className="shadow-lg h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-4">
+                <Card className="shadow-lg h-[200px] xs:h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-3 sm:p-4">
                    <div>
-                    <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4 mx-auto" />
-                    <p className="text-sm sm:text-base">Your expense chart will appear here.</p>
+                    <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4 mx-auto" />
+                    <p className="text-xs xs:text-sm sm:text-base">Your expense chart will appear here.</p>
                    </div>
                 </Card>
               ) : (
