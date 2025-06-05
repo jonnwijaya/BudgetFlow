@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react'; // Added useCallback
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2, FilterX, LogIn, UserPlus } from 'lucide-react';
+import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { CurrencyCode, ExpenseCategory } from '@/types';
+import type { CurrencyCode } from '@/types';
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
@@ -30,33 +30,30 @@ import { useToast } from '@/hooks/use-toast';
 import { ThemeToggleButton } from './ThemeToggleButton';
 import { clearLocalData } from '@/lib/localStore';
 
-
 const DeleteAccountDialog = dynamic(() => import('./DeleteAccountDialog'), { ssr: false });
 
 interface HeaderProps {
   user: User | null;
   appMode: 'guest' | 'authenticated' | 'loading';
   onAddExpenseClick: () => void;
-  totalSpent: number;
+  currentDisplaySpending: number; // This is the potentially filtered amount from totalDisplayedInList
+  overallMonthSpending: number;  // This is the total unfiltered spending for the month
   budgetThreshold?: number | null;
   selectedCurrency: CurrencyCode;
   onCurrencyChange: (currencyCode: CurrencyCode) => void;
   currencies: ReadonlyArray<{ code: CurrencyCode; name: string; symbol: string }>;
-  selectedPieCategory: ExpenseCategory | null;
-  onClearPieCategoryFilter: () => void;
 }
 
 export default function AppHeader({
   user,
   appMode,
   onAddExpenseClick,
-  totalSpent,
+  currentDisplaySpending,
+  overallMonthSpending,
   budgetThreshold,
   selectedCurrency,
   onCurrencyChange,
   currencies,
-  selectedPieCategory,
-  onClearPieCategoryFilter
 }: HeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -64,12 +61,13 @@ export default function AppHeader({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null;
+  // Budget remaining is always calculated based on the overall month's spending
+  const budgetRemaining = budgetThreshold != null ? budgetThreshold - overallMonthSpending : null;
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setIsLoggingOut(true);
     const { error } = await supabase.auth.signOut();
-    clearLocalData(); // Clear local data on logout
+    clearLocalData(); 
 
     if (error && error.message !== 'Auth session missing!') {
       toast({
@@ -85,9 +83,9 @@ export default function AppHeader({
       router.replace('/login');
     }
     setIsLoggingOut(false);
-  };
+  }, [router, toast]);
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = useCallback(async () => {
     if (!user) {
         toast({
             title: "Error",
@@ -120,7 +118,7 @@ export default function AppHeader({
       if (profileError) throw new Error(`Failed to deactivate profile: ${profileError.message}`);
 
       const { error: signOutError } = await supabase.auth.signOut();
-      clearLocalData(); // Clear local data on account deletion too
+      clearLocalData(); 
 
       if (signOutError && signOutError.message !== 'Auth session missing!') {
          toast({
@@ -146,7 +144,7 @@ export default function AppHeader({
       setIsDeletingAccount(false);
       setIsDeleteDialogOpen(false);
     }
-  };
+  }, [user, router, toast]);
 
 
   return (
@@ -155,7 +153,7 @@ export default function AppHeader({
         <div className="container mx-auto flex items-center justify-between py-2 sm:py-3 px-2 sm:px-4">
           <div className="flex items-center gap-1 sm:gap-2">
             <Wallet className="h-6 w-6 sm:h-7 text-primary" />
-            <h1 className="text-lg sm:text-xl font-headline font-bold text-primary">BudgetFlow</h1>
+            <Link href="/" className="text-lg sm:text-xl font-headline font-bold text-primary hover:no-underline">BudgetFlow</Link>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
             {(appMode === 'authenticated' || appMode === 'guest') && (
@@ -167,39 +165,30 @@ export default function AppHeader({
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map(currency => (
-                      <SelectItem key={currency.code} value={currency.code}>
-                        {currency.code} ({currency.symbol})
+                    {currencies.map(currencyItem => (
+                      <SelectItem key={currencyItem.code} value={currencyItem.code}>
+                        {currencyItem.code} ({currencyItem.symbol})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">{selectedPieCategory ? 'Filtered' : 'Spent'}</p>
+                  {/* This shows the current display total, which might be filtered */}
+                  <p className="text-xs text-muted-foreground">Spent</p> 
                   <p className="text-sm font-semibold">
-                    {formatCurrency(totalSpent, selectedCurrency)}
+                    {formatCurrency(currentDisplaySpending, selectedCurrency)}
                   </p>
                 </div>
 
-                {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && !selectedPieCategory && (
+                {/* Remaining budget is always based on overall month spending */}
+                {budgetThreshold != null && budgetRemaining != null && (
                   <div className="text-center">
                      <p className="text-xs text-muted-foreground">Rem.</p>
                     <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
                   </div>
-                )}
-                 {selectedPieCategory && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onClearPieCategoryFilter}
-                    className="h-8 text-xs px-2 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
-                    aria-label={`Clear ${selectedPieCategory} filter`}
-                  >
-                    <FilterX className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">{selectedPieCategory}</span>
-                  </Button>
                 )}
 
                 <Button

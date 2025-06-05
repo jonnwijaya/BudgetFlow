@@ -3,7 +3,7 @@
 
 import React from 'react';
 import type { SavingsGoal, CurrencyCode } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { format as formatDate, parseISO } from 'date-fns';
@@ -15,7 +15,7 @@ interface SavingsGoalItemProps {
   currency: CurrencyCode;
   onEdit: (goal: SavingsGoal) => void;
   onDelete: (goalId: string) => void;
-  onAddFunds: (goal: SavingsGoal) => void; // New prop
+  onAddFunds: (goal: SavingsGoal) => void;
 }
 
 function SavingsGoalItem({ goal, currency, onEdit, onDelete, onAddFunds }: SavingsGoalItemProps) {
@@ -74,4 +74,3 @@ function SavingsGoalItem({ goal, currency, onEdit, onDelete, onAddFunds }: Savin
 }
 
 export default React.memo(SavingsGoalItem);
-

@@ -1,8 +1,8 @@
 
-// This file is intentionally left mostly empty as part of removing recurring expenses.
-// It can be deleted from your project filesystem manually.
 'use client';
 
+// This component is intentionally minimal after removal of recurring expense functionality.
+// It can be manually deleted from the project filesystem.
 export default function RecurringExpenseItem() {
   return null;
 }

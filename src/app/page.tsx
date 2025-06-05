@@ -35,7 +35,6 @@ import {
 } from '@/lib/localStore';
 import { initializeLocalDataIfNotExists } from '@/lib/sampleData';
 
-// Dynamically import components
 const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet'), {
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
@@ -101,7 +100,7 @@ export default function BudgetFlowPage() {
   const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null);
 
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
-  const [isLoadingTip, setIsLoadingTip] = useState(true); // Start true for initial fetch
+  const [isLoadingTip, setIsLoadingTip] = useState(false); // Initial fetch handled by effect
 
   const [userProfileSettings, setUserProfileSettings] = useState<UserProfileSettings>({
     budget_threshold: null,
@@ -128,7 +127,7 @@ export default function BudgetFlowPage() {
 
   useEffect(() => {
     let isMounted = true;
-    initializeLocalDataIfNotExists(); // Ensure sample data for guests
+    initializeLocalDataIfNotExists(); 
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -145,7 +144,6 @@ export default function BudgetFlowPage() {
     );
     setAuthSubscription(subscription);
 
-    // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
         if (session) {
@@ -179,17 +177,16 @@ export default function BudgetFlowPage() {
         if (profileData.is_deactivated) {
           toast({ title: 'Account Deactivated', variant: 'destructive' });
           await supabase.auth.signOut();
-          setAppMode('guest'); // Fallback to guest mode
+          setAppMode('guest'); 
           return;
         }
         setUserProfileSettings({
             budget_threshold: profileData.budget_threshold,
             selected_currency: (profileData.selected_currency as CurrencyCode) || 'USD'
         });
-        // Award login streak for authenticated users
         await checkAndAwardLoginStreak({ id: userId } as User, profileData as Profile, toast);
 
-      } else { // No profile, create one
+      } else { 
         const {data: newProfile, error: newProfileError} = await supabase
         .from('profiles')
         .insert({id: userId, selected_currency: 'USD', budget_threshold: null, last_login_at: new Date().toISOString(), login_streak_days: 1})
@@ -199,7 +196,7 @@ export default function BudgetFlowPage() {
         if(newProfile) {
             setUserProfileSettings(newProfile);
         } else {
-            setUserProfileSettings(getLocalProfileSettings()); // Fallback
+            setUserProfileSettings(getLocalProfileSettings()); 
         }
       }
 
@@ -218,7 +215,6 @@ export default function BudgetFlowPage() {
     } catch (error: any) {
       console.error('Error fetching authenticated user data:', error);
       toast({ title: 'Data Load Error', description: error.message, variant: 'destructive' });
-      // Potentially fall back to guest mode or show error state
       setExpenses([]); setSavingsGoals([]); setUserProfileSettings(getLocalProfileSettings());
     }
   }, [toast]);
@@ -244,7 +240,7 @@ export default function BudgetFlowPage() {
 
     setIsLoadingData(true);
     if (appMode === 'authenticated' && user) {
-      setShowGuestWarning(false); // Ensure guest warning is hidden if authenticated
+      setShowGuestWarning(false); 
       fetchAuthenticatedUserData(user.id).finally(() => {
         if (isMounted) setIsLoadingData(false);
       });
@@ -252,10 +248,9 @@ export default function BudgetFlowPage() {
       loadGuestData();
       if (isMounted) setIsLoadingData(false);
     } else {
-      // Not authenticated and not guest (e.g. still loading initial session)
       setExpenses([]);
       setSavingsGoals([]);
-      setUserProfileSettings(getLocalProfileSettings()); // Default to local if unsure
+      setUserProfileSettings(getLocalProfileSettings()); 
       if (isMounted) setIsLoadingData(false);
     }
     return () => { isMounted = false; };
@@ -276,7 +271,7 @@ export default function BudgetFlowPage() {
     });
   }, [expenses, selectedMonth, selectedYear]);
 
-  const totalSpendingForMonth = useMemo(() => { // Always full month total
+  const totalSpendingForMonth = useMemo(() => {
     return expensesForSelectedMonthYear.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expensesForSelectedMonthYear]);
 
@@ -287,7 +282,7 @@ export default function BudgetFlowPage() {
     return expensesForSelectedMonthYear;
   }, [expensesForSelectedMonthYear, selectedPieCategory]);
 
-  const totalDisplayedInList = useMemo(() => { // This is what header uses for "Spent"
+  const totalDisplayedInList = useMemo(() => {
     return filteredExpensesToList.reduce((sum, exp) => sum + exp.amount, 0);
   }, [filteredExpensesToList]);
 
@@ -301,12 +296,12 @@ export default function BudgetFlowPage() {
 
 
   const fetchNewTip = useCallback(async () => {
-    if (appMode !== 'authenticated' || !user || isLoadingData) {
-        setFinancialTip(null); // Clear tip for guests or if loading
-        setIsLoadingTip(false); // Ensure loading stops if not applicable
+    if (appMode !== 'authenticated' || !user) {
+        setFinancialTip(null);
+        setIsLoadingTip(false);
         return;
     }
-    // setIsLoadingTip is now managed directly before/after this call in useEffect/manual refresh
+    setIsLoadingTip(true);
     try {
       const tipInput = {
         financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalSpendingForMonth, userProfileSettings.selected_currency)}. Budget: ${userProfileSettings.budget_threshold ? formatCurrency(userProfileSettings.budget_threshold, userProfileSettings.selected_currency) : 'Not set'}.`,
@@ -321,20 +316,20 @@ export default function BudgetFlowPage() {
     } finally {
       setIsLoadingTip(false);
     }
-  }, [appMode, user, totalSpendingForMonth, userProfileSettings.selected_currency, userProfileSettings.budget_threshold, isLoadingData]);
+  }, [appMode, user, totalSpendingForMonth, userProfileSettings.selected_currency, userProfileSettings.budget_threshold]);
 
-  // Effect for initial tip fetch
   useEffect(() => {
     let isMounted = true;
-    if (appMode === 'authenticated' && user && !isLoadingData) {
-        setIsLoadingTip(true); // Set loading true before fetch
+    // Fetch tip only once when component mounts and user data is available, not on every data change.
+    // Manual refresh is handled by the button on SmartTipCard.
+    if (appMode === 'authenticated' && user && !isLoadingData && !financialTip) { // Add !financialTip to fetch only if no tip exists
         fetchNewTip();
     } else if (appMode === 'guest') {
         setFinancialTip(null);
         setIsLoadingTip(false);
     }
     return () => { isMounted = false; };
-  }, [appMode, user, isLoadingData, fetchNewTip]); // fetchNewTip is stable
+  }, [appMode, user, isLoadingData, financialTip, fetchNewTip]);
 
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
@@ -352,7 +347,6 @@ export default function BudgetFlowPage() {
             setExpenses(prev => prev.map(exp => exp.id === updatedExpense.id ? { ...updatedExpense, date: parseISO(updatedExpense.date) } as Expense : exp).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() ));
             toast({ title: "Expense Updated" });
           }
-          setExpenseToEdit(null);
         } else {
           const { data: savedExpense, error } = await supabase.from('expenses')
             .insert([{ ...expenseData, date: formattedDate, user_id: user.id, created_at: now, updated_at: now }]).select().single();
@@ -364,25 +358,27 @@ export default function BudgetFlowPage() {
         }
       } catch (error: any) {
         toast({ title: "Save Error", description: error.message, variant: "destructive" });
+      } finally {
+        setExpenseToEdit(null); // Clear edit state after operation
       }
     } else if (appMode === 'guest') {
         if (expenseToEdit) {
             const updated = updateLocalExpense({
-                ...expenseToEdit, // includes id, user_id, created_at
-                ...expenseData, // new data from form
-                date: expenseData.date, // ensure Date object
+                ...expenseToEdit, 
+                ...expenseData, 
+                date: expenseData.date, 
                 updated_at: now,
             });
             if(updated) {
                 setExpenses(getLocalExpenses());
                 toast({ title: "Expense Updated (Local)" });
             }
-            setExpenseToEdit(null);
         } else {
-            addLocalExpense(expenseData); // localStore handles ID, user_id, timestamps
+            addLocalExpense(expenseData); 
             setExpenses(getLocalExpenses());
             toast({ title: "Expense Added (Local)" });
         }
+        setExpenseToEdit(null); // Clear edit state
     }
   }, [appMode, user, toast, expenseToEdit]);
 
@@ -403,7 +399,6 @@ export default function BudgetFlowPage() {
             setSavingsGoals(prev => prev.map(g => g.id === updatedGoal.id ? { ...updatedGoal, target_date: updatedGoal.target_date ? parseISO(updatedGoal.target_date) : null } as SavingsGoal : g).sort((a,b)=>new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
             toast({ title: "Goal Updated" });
           }
-          setGoalToEdit(null);
         } else {
           const { data: savedGoal, error } = await supabase.from('savings_goals')
             .insert([{ ...dataToSave, user_id: user.id, created_at:now, updated_at:now }]).select().single();
@@ -415,25 +410,27 @@ export default function BudgetFlowPage() {
         }
       } catch (error: any) {
         toast({ title: "Save Error", description: error.message, variant: "destructive" });
+      } finally {
+        setGoalToEdit(null);
       }
     } else if (appMode === 'guest') {
-        if (goalId && goalToEdit) { // goalToEdit ensures we have existing created_at etc.
+        if (goalId && goalToEdit) { 
             const updated = updateLocalSavingsGoal({
-                ...goalToEdit, // keep existing id, user_id, created_at
-                ...goalData, // apply new form data
-                target_date: goalData.target_date, // ensure Date object or null
+                ...goalToEdit, 
+                ...goalData, 
+                target_date: goalData.target_date, 
                 updated_at: now,
             });
             if(updated) {
                 setSavingsGoals(getLocalSavingsGoals());
                 toast({ title: "Goal Updated (Local)" });
             }
-            setGoalToEdit(null);
         } else {
-             addLocalSavingsGoal(goalData); // localStore handles ID, user_id, timestamps
+             addLocalSavingsGoal(goalData); 
              setSavingsGoals(getLocalSavingsGoals());
              toast({ title: "Goal Added (Local)" });
         }
+        setGoalToEdit(null);
     }
   }, [appMode, user, toast, goalToEdit]);
 
@@ -469,7 +466,7 @@ export default function BudgetFlowPage() {
             toast({ title: "Funds Added (Local)"});
         }
     }
-  }, [appMode, user, toast, savingsGoals, userProfileSettings.selected_currency]);
+  }, [appMode, user, toast, savingsGoals]);
 
   const handleEditExpenseClick = useCallback((expense: Expense) => { setExpenseToEdit(expense); setIsAddExpenseSheetOpen(true); }, []);
   const handleEditGoalClick = useCallback((goal: SavingsGoal) => { setGoalToEdit(goal); setIsAddSavingsGoalSheetOpen(true); }, []);
@@ -514,7 +511,7 @@ export default function BudgetFlowPage() {
     setIsDeleteSavingsGoalDialogOpen(false); setGoalIdToDelete(null); setGoalNameToDelete(undefined);
   }, [appMode, user, goalIdToDelete, toast]);
 
-  const handleExportSummary = () => { 
+  const handleExportSummary = useCallback(() => { 
     if (filteredExpensesToList.length === 0) {
       toast({ title: "No Data", description: "No expenses in the selected month/category to export." });
       return;
@@ -529,7 +526,7 @@ export default function BudgetFlowPage() {
     link.setAttribute("download", `budgetflow_summary_${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}${selectedPieCategory ? '_'+selectedPieCategory : ''}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
     toast({ title: "Export Successful" });
-  };
+  }, [filteredExpensesToList, selectedMonth, selectedYear, selectedPieCategory, toast]);
 
   const handleSetThreshold = useCallback(async (newThreshold: number | null) => {
     if (appMode === 'authenticated' && user) {
@@ -547,7 +544,7 @@ export default function BudgetFlowPage() {
         setUserProfileSettings({ ...currentSettings, budget_threshold: newThreshold });
         toast({ title: newThreshold !== null ? "Budget Set (Local)" : "Budget Cleared (Local)" });
     }
-  }, [appMode, user, toast, userProfileSettings.selected_currency]);
+  }, [appMode, user, toast]);
 
   const handleCurrencyChange = useCallback(async (newCurrency: CurrencyCode) => {
     if (appMode === 'authenticated' && user) {
@@ -571,12 +568,22 @@ export default function BudgetFlowPage() {
     setSelectedPieCategory(prevCategory => category === prevCategory ? null : category);
   }, []);
 
-  const handleDismissGuestWarning = () => {
+  const handleOpenAddExpenseSheet = useCallback(() => {
+    setExpenseToEdit(null);
+    setIsAddExpenseSheetOpen(true);
+  }, []);
+
+  const handleOpenAddGoalSheet = useCallback(() => {
+    setGoalToEdit(null);
+    setIsAddSavingsGoalSheetOpen(true);
+  }, []);
+
+  const handleDismissGuestWarning = useCallback(() => {
     if (typeof window !== 'undefined') {
         localStorage.setItem(GUEST_WARNING_DISMISSED_KEY, 'true');
     }
     setShowGuestWarning(false);
-  };
+  }, []);
 
   if (appMode === 'loading' || isLoadingData) {
     return (
@@ -592,14 +599,13 @@ export default function BudgetFlowPage() {
       <AppHeader
         user={user}
         appMode={appMode}
-        onAddExpenseClick={() => { setExpenseToEdit(null); setIsAddExpenseSheetOpen(true); }}
-        totalSpent={totalSpendingForMonth} // Header always shows total for month
+        onAddExpenseClick={handleOpenAddExpenseSheet}
+        currentDisplaySpending={totalDisplayedInList}
+        overallMonthSpending={totalSpendingForMonth}
         budgetThreshold={userProfileSettings.budget_threshold}
         selectedCurrency={userProfileSettings.selected_currency}
         onCurrencyChange={handleCurrencyChange}
         currencies={SUPPORTED_CURRENCIES}
-        // selectedPieCategory={selectedPieCategory} // Header no longer needs this directly
-        // onClearPieCategoryFilter={() => setSelectedPieCategory(null)} // Header no longer needs this
       />
 
       <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 space-y-3 sm:space-y-4">
@@ -677,7 +683,7 @@ export default function BudgetFlowPage() {
               <CardHeader className="p-2 xs:p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2"> <PiggyBank className="h-5 w-5 sm:h-6 text-primary" /> <CardTitle><h2 className="font-headline text-base sm:text-lg">Savings Goals</h2></CardTitle> </div>
-                  <Button variant="outline" size="sm" onClick={() => { setGoalToEdit(null); setIsAddSavingsGoalSheetOpen(true); }} className="mt-2 sm:mt-0 h-8 sm:h-9 text-xs sm:text-sm">
+                  <Button variant="outline" size="sm" onClick={handleOpenAddGoalSheet} className="mt-2 sm:mt-0 h-8 sm:h-9 text-xs sm:text-sm">
                     <PlusCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Add Goal
                   </Button>
                 </div>
@@ -688,7 +694,7 @@ export default function BudgetFlowPage() {
                   currency={userProfileSettings.selected_currency}
                   onEditGoal={handleEditGoalClick}
                   onDeleteGoal={(goalId) => { const goal = savingsGoals.find(g => g.id === goalId); if(goal) handleDeleteGoalClick(goal); }}
-                  onAddGoalClick={() => { setGoalToEdit(null); setIsAddSavingsGoalSheetOpen(true); }}
+                  onAddGoalClick={handleOpenAddGoalSheet}
                   onAddFundsToGoal={handleOpenAddFundsSheet}
                 />
               </CardContent>
@@ -704,7 +710,7 @@ export default function BudgetFlowPage() {
                 <ExpenseChart expenses={expensesForSelectedMonthYear} currency={userProfileSettings.selected_currency} onCategoryClick={handleCategoryChartClick} selectedCategory={selectedPieCategory} />
               )}
             {appMode === 'authenticated' && user ? (
-                <SmartTipCard tipData={financialTip} onRefreshTip={() => { setIsLoadingTip(true); fetchNewTip(); }} isLoading={isLoadingTip} />
+                <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
             ) : (
                 <Card className="shadow-lg">
                     <CardHeader className="p-4 sm:p-6">
@@ -741,5 +747,3 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
-
-    
