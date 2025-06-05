@@ -15,7 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { clearLocalData } from '@/lib/localStore'; // Import clearLocalData
+import { clearLocalData } from '@/lib/localStore';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -45,6 +45,11 @@ export default function RegisterPage() {
     try {
       // Clear any local guest data upon registration attempt
       clearLocalData();
+      toast({
+        title: "Switched to Cloud Account",
+        description: "You're creating a new cloud account. Any unsynced local guest data has been cleared.",
+        duration: 5000,
+      });
 
       const emailRedirectTo = `${window.location.origin}/`; // Redirect to dashboard after confirmation
 

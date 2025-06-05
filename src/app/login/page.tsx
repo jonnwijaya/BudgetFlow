@@ -20,7 +20,7 @@ import type { Subscription, Session, User } from '@supabase/supabase-js';
 import type { Profile } from '@/types';
 import { checkAndAwardLoginStreak } from '@/lib/achievementsHelper';
 import { format } from 'date-fns';
-import { clearLocalData } from '@/lib/localStore'; // Import clearLocalData
+import { clearLocalData } from '@/lib/localStore';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -42,9 +42,9 @@ export default function LoginPage() {
       // Clear any local guest data upon successful login
       clearLocalData();
       toast({
-        title: "Local Data Cleared",
-        description: "Switched to your cloud account. Any unsynced local data has been cleared.",
-        duration: 4000,
+        title: "Switched to Cloud Account",
+        description: "You're now using your cloud account. Any unsynced local guest data has been cleared.",
+        duration: 5000,
       });
 
       const { data: profile, error: profileError } = await supabase
