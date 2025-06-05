@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
@@ -19,6 +21,7 @@ import type { Subscription, Session } from '@supabase/supabase-js';
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -63,7 +66,7 @@ export default function LoginPage() {
           }
           return false;
         }
-        // router.replace('/');
+        // router.replace('/'); // Redirection handled by onAuthStateChange or initial check effect
         return true;
       } catch (e: any) {
         console.error("Unexpected error checking deactivation status:", e);
@@ -86,25 +89,27 @@ export default function LoginPage() {
 
   useEffect(() => {
     let isMounted = true;
-    setIsCheckingAuth(true); // Start by assuming we are checking auth
+    setIsCheckingAuth(true);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!isMounted) return;
 
       if (session) {
-        // If a session exists, verify it (e.g., check deactivation status)
         const stillAuthenticated = await checkSessionAndDeactivation(session, false);
         if (isMounted) {
           if (stillAuthenticated) {
-            router.replace('/'); // User is authenticated and active, redirect to home
+            router.replace('/');
           } else {
-            // User was signed out by checkSessionAndDeactivation or session was invalid.
-            setIsCheckingAuth(false); // Stop checking, login form will show
+            setIsCheckingAuth(false);
           }
         }
       } else {
-        // No initial session, so stop checking and show login form
         if (isMounted) setIsCheckingAuth(false);
+      }
+    }).catch(error => {
+      console.error("Error getting initial session:", error);
+       if (isMounted) {
+        setIsCheckingAuth(false);
       }
     });
 
@@ -112,18 +117,20 @@ export default function LoginPage() {
       if (!isMounted) return;
       
       if (event === 'SIGNED_IN' && session) {
-        setIsLoading(true); // Show loading indicator while checking deactivation
+        setIsLoading(true); 
         const stillAuthenticated = await checkSessionAndDeactivation(session, true);
         if (isMounted) {
           if (stillAuthenticated) {
             router.replace('/');
           } else {
-            setIsCheckingAuth(false); // Ensure form is shown if check leads to sign out
+            setIsCheckingAuth(false); 
           }
           setIsLoading(false);
         }
       } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         if (isMounted) setIsCheckingAuth(false);
+      } else if (event === 'INITIAL_SESSION' && !session) {
+         if (isMounted) setIsCheckingAuth(false);
       }
     });
 
@@ -138,6 +145,7 @@ export default function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
+      rememberMe: true, // Default "Remember Me" to checked
     },
   });
 
@@ -152,19 +160,15 @@ export default function LoginPage() {
       if (error) {
         throw error;
       }
-      // Don't toast "Login Attempted" here. Let onAuthStateChange handle 'SIGNED_IN'
-      // which will then call checkSessionAndDeactivation and provide more specific feedback.
-      // If successful, onAuthStateChange will trigger redirection via checkSessionAndDeactivation.
+      // onAuthStateChange will handle 'SIGNED_IN'
     } catch (error: any) {
       toast({
         title: 'Login Failed',
         description: error.message || 'Invalid credentials or account issue. Please try again.',
         variant: 'destructive',
       });
-      setIsLoading(false); // Only set isLoading false on error here
+      setIsLoading(false); 
     }
-    // Do not set setIsLoading(false) here on success; let onAuthStateChange SIGNED_IN handler do it
-    // after its checks.
   };
 
   if (isCheckingAuth) {
@@ -206,14 +210,7 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <div className="flex items-center justify-between">
-                      <FormLabel>Password</FormLabel>
-                      <Link href="/forgot-password" passHref legacyBehavior>
-                        <a className="text-sm font-medium text-primary hover:underline">
-                          Forgot password?
-                        </a>
-                      </Link>
-                    </div>
+                    <FormLabel>Password</FormLabel>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
@@ -221,6 +218,31 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
+              <div className="flex items-center justify-between">
+                <FormField
+                  control={form.control}
+                  name="rememberMe"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          id="rememberMe"
+                        />
+                      </FormControl>
+                      <Label htmlFor="rememberMe" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        Remember me
+                      </Label>
+                    </FormItem>
+                  )}
+                />
+                <Link href="/forgot-password" passHref legacyBehavior>
+                  <a className="text-sm font-medium text-primary hover:underline">
+                    Forgot password?
+                  </a>
+                </Link>
+              </div>
               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
                 Sign In
