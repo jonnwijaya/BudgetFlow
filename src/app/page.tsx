@@ -7,14 +7,17 @@ import dynamic from 'next/dynamic';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
 import ExpenseList from '@/components/app/ExpenseList';
+import SavingsGoalList from '@/components/app/SavingsGoalList'; // New import
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, BarChart3, CalendarDays, Loader2 } from 'lucide-react';
-import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory } from '@/types';
+import { Button } from '@/components/ui/button'; // New import
+import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle } from 'lucide-react'; // Added PiggyBank, PlusCircle
+import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal } from '@/types'; // Added SavingsGoal
 import { SUPPORTED_CURRENCIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
+import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet'; // New import
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
@@ -28,6 +31,10 @@ import { checkAndAwardUnderBudgetMonth } from '@/lib/achievementsHelper';
 const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet'), {
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" /> 
+});
+const AddSavingsGoalSheet = dynamic(() => import('@/components/app/AddSavingsGoalSheet'), { // New dynamic import
+  ssr: false,
+  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
 });
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
@@ -59,6 +66,7 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
 });
 const SetThresholdDialog = dynamic(() => import('@/components/app/SetThresholdDialog'), { ssr: false });
 const DeleteExpenseDialog = dynamic(() => import('@/components/app/DeleteExpenseDialog'), { ssr: false });
+const DeleteSavingsGoalDialog = dynamic(() => import('@/components/app/DeleteSavingsGoalDialog'), { ssr: false }); // New dynamic import
 
 
 export default function BudgetFlowPage() {
@@ -70,7 +78,9 @@ export default function BudgetFlowPage() {
 
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]); // New state for savings goals
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
+  const [isAddSavingsGoalSheetOpen, setIsAddSavingsGoalSheetOpen] = useState(false); // New state
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
 
@@ -81,8 +91,12 @@ export default function BudgetFlowPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
+  const [goalToEdit, setGoalToEdit] = useState<SavingsGoal | null>(null); // New state
   const [isDeleteExpenseDialogOpen, setIsDeleteExpenseDialogOpen] = useState(false);
+  const [isDeleteSavingsGoalDialogOpen, setIsDeleteSavingsGoalDialogOpen] = useState(false); // New state
   const [expenseIdToDelete, setExpenseIdToDelete] = useState<string | null>(null);
+  const [goalIdToDelete, setGoalIdToDelete] = useState<string | null>(null); // New state
+  const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined); // New state for dialog message
 
   const { toast } = useToast();
 
@@ -125,7 +139,7 @@ export default function BudgetFlowPage() {
       isMounted = false;
       authSubscription?.unsubscribe();
     };
-  }, [router]); // authSubscription removed from deps as it's set inside
+  }, [router]);
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -143,11 +157,8 @@ export default function BudgetFlowPage() {
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') { // No profile found
+        if (error.code === 'PGRST116') { 
           console.log('No profile found for user, attempting to create one or using defaults.');
-          // Attempt to create profile or use default if this is part of a first-login flow
-          // For now, just set defaults client-side if no profile.
-          // A more robust solution would create the profile server-side or on user creation.
           setBudgetThreshold(null);
           setSelectedCurrency('USD');
         } else {
@@ -163,7 +174,6 @@ export default function BudgetFlowPage() {
         }
         setBudgetThreshold(data.budget_threshold);
         setSelectedCurrency((data.selected_currency as CurrencyCode) || 'USD');
-        // Profile data like last_login_at, login_streak_days are now available if needed elsewhere
       }
     } catch (e: any) {
         console.error("Unexpected error in fetchProfile:", e);
@@ -187,6 +197,22 @@ export default function BudgetFlowPage() {
     }
   }, [toast]);
 
+  const fetchSavingsGoals = useCallback(async (userId: string) => { // New fetch function
+    const { data, error } = await supabase
+      .from('savings_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching savings goals:', error);
+      toast({ title: 'Savings Goals Load Error', description: `Could not load savings goals: ${error.message}`, variant: 'destructive' });
+      setSavingsGoals([]);
+    } else if (data) {
+      setSavingsGoals(data.map(goal => ({ ...goal, target_date: goal.target_date ? parseISO(goal.target_date) : null })) as SavingsGoal[]);
+    }
+  }, [toast]);
+
   useEffect(() => {
     let isDataEffectMounted = true;
     if (!isLoadingAuth && user?.id) {
@@ -194,25 +220,26 @@ export default function BudgetFlowPage() {
       Promise.all([
         fetchProfile(user.id),
         fetchExpenses(user.id),
+        fetchSavingsGoals(user.id), // Fetch savings goals
       ]).finally(() => {
         if (isDataEffectMounted) setIsLoadingData(false);
       });
     } else if (!isLoadingAuth && !user) {
       setExpenses([]);
+      setSavingsGoals([]); // Clear savings goals
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
       setFinancialTip(null);
       if (isDataEffectMounted) setIsLoadingData(false);
     }
     return () => { isDataEffectMounted = false; };
-  }, [user, isLoadingAuth, fetchProfile, fetchExpenses]);
+  }, [user, isLoadingAuth, fetchProfile, fetchExpenses, fetchSavingsGoals]);
 
 
   const availableYears = useMemo(() => {
     const yearsFromExpenses = new Set(expenses.map(exp => new Date(exp.date).getFullYear()));
     const currentYear = new Date().getFullYear();
     yearsFromExpenses.add(currentYear);
-    // Add previous year and next year if not present, for easier navigation
     yearsFromExpenses.add(currentYear - 1);
     yearsFromExpenses.add(currentYear + 1);
     return Array.from(yearsFromExpenses).sort((a, b) => b - a);
@@ -228,9 +255,8 @@ export default function BudgetFlowPage() {
   const totalSpent = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
 
-  // Achievement Check for "Under Budget Month"
   useEffect(() => {
-    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0) { // Ensure data is loaded and there are expenses
+    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0) {
       checkAndAwardUnderBudgetMonth(
         user,
         totalSpent,
@@ -257,7 +283,6 @@ export default function BudgetFlowPage() {
     } catch (error) {
       console.error("Error fetching financial tip:", error);
       setFinancialTip(null);
-      // toast({ title: "Tip Error", description: "Could not fetch a new financial tip.", variant: "default" }); // Toast can be noisy
     } finally {
       setIsLoadingTip(false);
     }
@@ -267,7 +292,7 @@ export default function BudgetFlowPage() {
     if (user && !isLoadingData && !isLoadingAuth) {
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]); // Re-fetch tip if month/year changes
+  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]);
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
@@ -321,14 +346,80 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast, expenseToEdit]);
 
+  const handleSaveSavingsGoal = useCallback(async (goalData: SavingsGoalFormData, goalId?: string) => { // New save function
+    if (!user) {
+      toast({ title: "Error", description: "You must be logged in to save a savings goal.", variant: "destructive" });
+      return;
+    }
+    try {
+      const dataToSave = {
+        ...goalData,
+        target_date: goalData.target_date ? format(goalData.target_date, 'yyyy-MM-dd') : null,
+        user_id: user.id,
+      };
+
+      if (goalId) { // Editing existing goal
+        const { data: updatedGoal, error } = await supabase
+          .from('savings_goals')
+          .update(dataToSave) // Supabase automatically handles updated_at via trigger
+          .eq('id', goalId)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (updatedGoal) {
+          setSavingsGoals(prevGoals =>
+            prevGoals.map(g =>
+              g.id === updatedGoal.id ? { ...updatedGoal, target_date: updatedGoal.target_date ? parseISO(updatedGoal.target_date) : null } as SavingsGoal : g
+            ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          );
+          toast({ title: "Savings Goal Updated", description: `${updatedGoal.goal_name} successfully updated.` });
+        }
+        setGoalToEdit(null);
+      } else { // Adding new goal
+        const { data: savedGoal, error } = await supabase
+          .from('savings_goals')
+          .insert([dataToSave])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (savedGoal) {
+           setSavingsGoals(prevGoals =>
+            [...prevGoals, { ...savedGoal, target_date: savedGoal.target_date ? parseISO(savedGoal.target_date) : null } as SavingsGoal]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          );
+          toast({ title: "Savings Goal Added", description: `${savedGoal.goal_name} successfully added.` });
+        }
+      }
+    } catch (error: any) {
+      console.error("Failed to save savings goal:", error);
+      toast({ title: "Save Error", description: error.message || "Could not save savings goal.", variant: "destructive" });
+    }
+  }, [user, toast]);
+
   const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
     setIsAddExpenseSheetOpen(true);
   }, []);
 
+  const handleEditGoalClick = useCallback((goal: SavingsGoal) => { // New edit click handler
+    setGoalToEdit(goal);
+    setIsAddSavingsGoalSheetOpen(true);
+  }, []);
+
   const handleDeleteExpenseClick = useCallback((id: string) => {
     setExpenseIdToDelete(id);
     setIsDeleteExpenseDialogOpen(true);
+  }, []);
+
+  const handleDeleteGoalClick = useCallback((goal: SavingsGoal) => { // New delete click handler
+    setGoalIdToDelete(goal.id);
+    setGoalNameToDelete(goal.goal_name);
+    setIsDeleteSavingsGoalDialogOpen(true);
   }, []);
 
   const confirmDeleteExpense = useCallback(async () => {
@@ -355,6 +446,32 @@ export default function BudgetFlowPage() {
       setExpenseIdToDelete(null);
     }
   }, [user, expenseIdToDelete, toast]);
+
+  const confirmDeleteSavingsGoal = useCallback(async () => { // New confirm delete function
+    if (!user || !goalIdToDelete) {
+      toast({ title: "Error", description: "User or goal ID missing.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('savings_goals')
+        .delete()
+        .eq('id', goalIdToDelete)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setSavingsGoals(prevGoals => prevGoals.filter(g => g.id !== goalIdToDelete));
+      toast({ title: "Savings Goal Deleted", description: "Savings goal successfully deleted." });
+    } catch (error: any) {
+      console.error("Failed to delete savings goal:", error);
+      toast({ title: "Delete Error", description: error.message || "Could not delete savings goal.", variant: "destructive" });
+    } finally {
+      setIsDeleteSavingsGoalDialogOpen(false);
+      setGoalIdToDelete(null);
+      setGoalNameToDelete(undefined);
+    }
+  }, [user, goalIdToDelete, toast]);
 
 
   const handleExportSummary = () => {
@@ -394,13 +511,12 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         budget_threshold: newThreshold,
-        // selected_currency: selectedCurrency, // Keep existing currency
         updated_at: new Date().toISOString(),
       };
 
       const { error } = await supabase
         .from('profiles')
-        .upsert(profileDataToUpsert, { onConflict: 'id' }) // onConflict ensures it updates if exists, inserts if not
+        .upsert(profileDataToUpsert, { onConflict: 'id' })
         .select()
         .single();
 
@@ -427,7 +543,6 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        // budget_threshold: budgetThreshold, // Preserve existing budget threshold
         updated_at: new Date().toISOString(),
       };
 
@@ -503,7 +618,7 @@ export default function BudgetFlowPage() {
                           value={selectedMonth.toString()}
                           onValueChange={(value) => setSelectedMonth(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-0 xs:basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Month" />
                           </SelectTrigger>
                           <SelectContent>
@@ -518,7 +633,7 @@ export default function BudgetFlowPage() {
                           value={selectedYear.toString()}
                           onValueChange={(value) => setSelectedYear(parseInt(value))}
                       >
-                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-0 xs:basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
+                          <SelectTrigger className="flex-grow xs:flex-grow-0 basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Year" />
                           </SelectTrigger>
                           <SelectContent>
@@ -549,6 +664,46 @@ export default function BudgetFlowPage() {
                   )}
               </CardContent>
             </Card>
+            
+            {/* Savings Goals Section */}
+            {user && (
+              <Card className="shadow-lg">
+                <CardHeader className="p-3 sm:p-4 md:p-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <PiggyBank className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                      <CardTitle><h2 className="font-headline text-base sm:text-lg md:text-xl">Savings Goals</h2></CardTitle>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setGoalToEdit(null);
+                        setIsAddSavingsGoalSheetOpen(true);
+                      }}
+                      className="mt-2 sm:mt-0"
+                    >
+                      <PlusCircle className="mr-1.5 h-4 w-4" /> Add Goal
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-1.5 xs:p-2 sm:p-3 md:p-4">
+                  <SavingsGoalList
+                    goals={savingsGoals}
+                    currency={selectedCurrency}
+                    onEditGoal={handleEditGoalClick}
+                    onDeleteGoal={(goalId) => {
+                        const goal = savingsGoals.find(g => g.id === goalId);
+                        handleDeleteGoalClick(goal!); // Pass the full goal object
+                    }}
+                    onAddGoalClick={() => {
+                        setGoalToEdit(null);
+                        setIsAddSavingsGoalSheetOpen(true);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-3 sm:space-y-4 md:space-y-6">
@@ -583,6 +738,20 @@ export default function BudgetFlowPage() {
           expenseToEdit={expenseToEdit}
         />
       )}
+      {user && isAddSavingsGoalSheetOpen && ( // Add Savings Goal Sheet
+        <AddSavingsGoalSheet
+          isOpen={isAddSavingsGoalSheetOpen}
+          setIsOpen={(isOpen) => {
+            setIsAddSavingsGoalSheetOpen(isOpen);
+            if(!isOpen) {
+              setGoalToEdit(null);
+            }
+          }}
+          onSaveGoal={handleSaveSavingsGoal}
+          currency={selectedCurrency}
+          goalToEdit={goalToEdit}
+        />
+      )}
       {user && isDeleteExpenseDialogOpen && (
         <DeleteExpenseDialog
           isOpen={isDeleteExpenseDialogOpen}
@@ -590,6 +759,14 @@ export default function BudgetFlowPage() {
           onConfirmDelete={confirmDeleteExpense}
           itemName="this expense"
         />
+      )}
+      {user && isDeleteSavingsGoalDialogOpen && ( // Delete Savings Goal Dialog
+         <DeleteSavingsGoalDialog
+            isOpen={isDeleteSavingsGoalDialogOpen}
+            onOpenChange={setIsDeleteSavingsGoalDialogOpen}
+            onConfirmDelete={confirmDeleteSavingsGoal}
+            goalName={goalNameToDelete}
+         />
       )}
     </div>
   );
