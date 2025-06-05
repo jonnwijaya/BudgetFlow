@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import AppHeader from '@/components/app/Header';
 import AppFooter from '@/components/app/Footer';
 import ExpenseList from '@/components/app/ExpenseList';
@@ -81,6 +82,8 @@ const DeleteExpenseDialog = dynamic(() => import('@/components/app/DeleteExpense
 const DeleteSavingsGoalDialog = dynamic(() => import('@/components/app/DeleteSavingsGoalDialog'), { ssr: false });
 
 const GUEST_USER_ID = 'guest-user';
+const GUEST_WARNING_DISMISSED_KEY = 'budgetflow_guestWarningDismissed_v1';
+
 
 export default function BudgetFlowPage() {
   const router = useRouter();
@@ -98,7 +101,7 @@ export default function BudgetFlowPage() {
   const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null);
 
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
-  const [isLoadingTip, setIsLoadingTip] = useState(false);
+  const [isLoadingTip, setIsLoadingTip] = useState(true); // Start true for initial fetch
 
   const [userProfileSettings, setUserProfileSettings] = useState<UserProfileSettings>({
     budget_threshold: null,
@@ -119,6 +122,7 @@ export default function BudgetFlowPage() {
   const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined);
 
   const [selectedPieCategory, setSelectedPieCategory] = useState<ExpenseCategory | null>(null);
+  const [showGuestWarning, setShowGuestWarning] = useState(false);
 
   const { toast } = useToast();
 
@@ -223,6 +227,12 @@ export default function BudgetFlowPage() {
     setUserProfileSettings(getLocalProfileSettings());
     setExpenses(getLocalExpenses());
     setSavingsGoals(getLocalSavingsGoals());
+    if (typeof window !== 'undefined') {
+        const guestWarningDismissed = localStorage.getItem(GUEST_WARNING_DISMISSED_KEY);
+        if (guestWarningDismissed !== 'true') {
+            setShowGuestWarning(true);
+        }
+    }
   }, []);
 
  useEffect(() => {
@@ -234,6 +244,7 @@ export default function BudgetFlowPage() {
 
     setIsLoadingData(true);
     if (appMode === 'authenticated' && user) {
+      setShowGuestWarning(false); // Ensure guest warning is hidden if authenticated
       fetchAuthenticatedUserData(user.id).finally(() => {
         if (isMounted) setIsLoadingData(false);
       });
@@ -265,7 +276,7 @@ export default function BudgetFlowPage() {
     });
   }, [expenses, selectedMonth, selectedYear]);
 
-  const totalSpendingForMonth = useMemo(() => {
+  const totalSpendingForMonth = useMemo(() => { // Always full month total
     return expensesForSelectedMonthYear.reduce((sum, exp) => sum + exp.amount, 0);
   }, [expensesForSelectedMonthYear]);
 
@@ -292,12 +303,13 @@ export default function BudgetFlowPage() {
   const fetchNewTip = useCallback(async () => {
     if (appMode !== 'authenticated' || !user || isLoadingData) {
         setFinancialTip(null); // Clear tip for guests or if loading
+        setIsLoadingTip(false); // Ensure loading stops if not applicable
         return;
     }
-    setIsLoadingTip(true);
+    // setIsLoadingTip is now managed directly before/after this call in useEffect/manual refresh
     try {
       const tipInput = {
-        financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalDisplayedInList, userProfileSettings.selected_currency)}. Budget: ${userProfileSettings.budget_threshold ? formatCurrency(userProfileSettings.budget_threshold, userProfileSettings.selected_currency) : 'Not set'}.`,
+        financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalSpendingForMonth, userProfileSettings.selected_currency)}. Budget: ${userProfileSettings.budget_threshold ? formatCurrency(userProfileSettings.budget_threshold, userProfileSettings.selected_currency) : 'Not set'}.`,
         riskTolerance: "Moderate",
         investmentInterests: "Saving money, budgeting effectively."
       };
@@ -309,15 +321,21 @@ export default function BudgetFlowPage() {
     } finally {
       setIsLoadingTip(false);
     }
-  }, [appMode, user, totalDisplayedInList, userProfileSettings.selected_currency, userProfileSettings.budget_threshold, isLoadingData]);
+  }, [appMode, user, totalSpendingForMonth, userProfileSettings.selected_currency, userProfileSettings.budget_threshold, isLoadingData]);
 
+  // Effect for initial tip fetch
   useEffect(() => {
-    if (appMode === 'authenticated' && user && !isLoadingData && !financialTip && !isLoadingTip) {
-      fetchNewTip();
+    let isMounted = true;
+    if (appMode === 'authenticated' && user && !isLoadingData) {
+        setIsLoadingTip(true); // Set loading true before fetch
+        fetchNewTip();
     } else if (appMode === 'guest') {
-      setFinancialTip(null); // Ensure tip is cleared for guest mode
+        setFinancialTip(null);
+        setIsLoadingTip(false);
     }
-  }, [appMode, user, isLoadingData, financialTip, isLoadingTip, fetchNewTip]);
+    return () => { isMounted = false; };
+  }, [appMode, user, isLoadingData, fetchNewTip]); // fetchNewTip is stable
+
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     const formattedDate = format(expenseData.date, 'yyyy-MM-dd');
@@ -496,7 +514,7 @@ export default function BudgetFlowPage() {
     setIsDeleteSavingsGoalDialogOpen(false); setGoalIdToDelete(null); setGoalNameToDelete(undefined);
   }, [appMode, user, goalIdToDelete, toast]);
 
-  const handleExportSummary = () => { /* Remains largely the same, operates on current 'expenses' state */
+  const handleExportSummary = () => { 
     if (filteredExpensesToList.length === 0) {
       toast({ title: "No Data", description: "No expenses in the selected month/category to export." });
       return;
@@ -553,6 +571,13 @@ export default function BudgetFlowPage() {
     setSelectedPieCategory(prevCategory => category === prevCategory ? null : category);
   }, []);
 
+  const handleDismissGuestWarning = () => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem(GUEST_WARNING_DISMISSED_KEY, 'true');
+    }
+    setShowGuestWarning(false);
+  };
+
   if (appMode === 'loading' || isLoadingData) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -568,16 +593,28 @@ export default function BudgetFlowPage() {
         user={user}
         appMode={appMode}
         onAddExpenseClick={() => { setExpenseToEdit(null); setIsAddExpenseSheetOpen(true); }}
-        totalSpent={totalDisplayedInList} // Use totalDisplayedInList for header spending
+        totalSpent={totalSpendingForMonth} // Header always shows total for month
         budgetThreshold={userProfileSettings.budget_threshold}
         selectedCurrency={userProfileSettings.selected_currency}
         onCurrencyChange={handleCurrencyChange}
         currencies={SUPPORTED_CURRENCIES}
-        selectedPieCategory={selectedPieCategory}
-        onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
+        // selectedPieCategory={selectedPieCategory} // Header no longer needs this directly
+        // onClearPieCategoryFilter={() => setSelectedPieCategory(null)} // Header no longer needs this
       />
 
       <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 space-y-3 sm:space-y-4">
+        {appMode === 'guest' && showGuestWarning && (
+            <Alert variant="default" className="mb-3 sm:mb-4 shadow-md border-primary/50 bg-primary/5">
+              <Info className="h-5 w-5 text-primary" />
+              <AlertTitle className="font-semibold text-primary">Welcome to Guest Mode!</AlertTitle>
+              <AlertDescription className="space-y-1.5 text-sm text-foreground/80">
+                <p>Your data is currently stored locally in this browser and is not synced to the cloud.</p>
+                <p>If you choose to <Link href="/register" className="font-medium text-accent hover:underline">Sign Up</Link> or <Link href="/login" className="font-medium text-accent hover:underline">Login</Link> later, this local data <strong className="font-semibold text-accent">will not</strong> be automatically transferred to your cloud account and will be cleared from this browser when you sign in or register.</p>
+                <Button onClick={handleDismissGuestWarning} variant="outline" size="sm" className="mt-2 h-8 text-xs">Got it, Dismiss</Button>
+              </AlertDescription>
+            </Alert>
+        )}
+
         {budgetExceeded && (
           <Alert variant="destructive" className="shadow-md">
             <AlertTriangle className="h-4 w-4" />
@@ -667,7 +704,7 @@ export default function BudgetFlowPage() {
                 <ExpenseChart expenses={expensesForSelectedMonthYear} currency={userProfileSettings.selected_currency} onCategoryClick={handleCategoryChartClick} selectedCategory={selectedPieCategory} />
               )}
             {appMode === 'authenticated' && user ? (
-                <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />
+                <SmartTipCard tipData={financialTip} onRefreshTip={() => { setIsLoadingTip(true); fetchNewTip(); }} isLoading={isLoadingTip} />
             ) : (
                 <Card className="shadow-lg">
                     <CardHeader className="p-4 sm:p-6">
@@ -704,3 +741,5 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
+
+    
