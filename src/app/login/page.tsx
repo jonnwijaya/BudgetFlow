@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, LogIn } from 'lucide-react';
+import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Subscription, Session } from '@supabase/supabase-js';
 
@@ -31,6 +31,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   const checkSessionAndDeactivation = useCallback(async (currentSession: Session | null, showDeactivatedToast = true) => {
     if (currentSession) {
@@ -66,8 +67,7 @@ export default function LoginPage() {
           }
           return false;
         }
-        // router.replace('/'); // Redirection handled by onAuthStateChange or initial check effect
-        return true;
+        return true; 
       } catch (e: any) {
         console.error("Unexpected error checking deactivation status:", e);
         await supabase.auth.signOut();
@@ -80,10 +80,10 @@ export default function LoginPage() {
         }
         return false;
       } finally {
-        // setIsLoading(false); // This isLoading is for the login form submission, not initial check
+        // setIsLoading(false); // This isLoading is for the login form submission
       }
     }
-    return true; // No session to check, or session check passed without deactivation
+    return true; 
   }, [router, toast]);
 
 
@@ -145,7 +145,7 @@ export default function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
-      rememberMe: true, // Default "Remember Me" to checked
+      rememberMe: true, 
     },
   });
 
@@ -160,7 +160,6 @@ export default function LoginPage() {
       if (error) {
         throw error;
       }
-      // onAuthStateChange will handle 'SIGNED_IN'
     } catch (error: any) {
       toast({
         title: 'Login Failed',
@@ -211,9 +210,26 @@ export default function LoginPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
-                    </FormControl>
+                    <div className="relative">
+                      <FormControl>
+                        <Input 
+                          type={showPassword ? 'text' : 'password'} 
+                          placeholder="••••••••" 
+                          {...field} 
+                          className="pr-10"
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute inset-y-0 right-0 flex items-center justify-center h-full w-10 text-muted-foreground hover:text-primary"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
