@@ -319,10 +319,11 @@ export default function BudgetFlowPage() {
   }, [user, totalDisplayedInList, selectedCurrency, budgetThreshold, isLoadingData, isLoadingAuth]);
 
   useEffect(() => {
-    if (user && !isLoadingData && !isLoadingAuth) {
+    // Fetch initial tip only if user is loaded, data is ready, and no tip exists yet, and not currently loading one.
+    if (user && !isLoadingData && !isLoadingAuth && !financialTip && !isLoadingTip) {
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]); 
+  }, [user, isLoadingData, isLoadingAuth, financialTip, isLoadingTip, fetchNewTip]);
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
@@ -662,7 +663,7 @@ export default function BudgetFlowPage() {
           setExpenseToEdit(null);
           setIsAddExpenseSheetOpen(true);
         }}
-        totalSpent={totalDisplayedInList} 
+        totalSpent={totalSpendingForMonth} 
         budgetThreshold={budgetThreshold}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={handleCurrencyChange}
