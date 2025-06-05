@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle, FilterX } from 'lucide-react';
 import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal } from '@/types';
 import { SUPPORTED_CURRENCIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
@@ -21,10 +21,11 @@ import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
 import { checkAndAwardUnderBudgetMonth } from '@/lib/achievementsHelper';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 // Dynamically import components
@@ -36,10 +37,11 @@ const AddSavingsGoalSheet = dynamic(() => import('@/components/app/AddSavingsGoa
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
 });
-const AddFundsToGoalSheet = dynamic(() => import('@/components/app/AddFundsToGoalSheet'), { // New dynamic import
+const AddFundsToGoalSheet = dynamic(() => import('@/components/app/AddFundsToGoalSheet'), { 
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
 });
+
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
     <Card className="shadow-lg">
@@ -47,7 +49,7 @@ const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
         <CardTitle><h2 className="font-headline text-base sm:text-xl">Expense Breakdown</h2></CardTitle>
         <CardDescription className="text-xs sm:text-sm">Loading chart data...</CardDescription>
       </CardHeader>
-      <CardContent className="h-[200px] sm:h-[220px] md:h-[250px] flex flex-col items-center justify-center text-muted-foreground">
+      <CardContent className="h-[200px] xs:h-[230px] sm:h-[288px] flex flex-col items-center justify-center text-muted-foreground">
         <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary" />
         <p className="mt-2 text-xs sm:text-sm">Loading chart...</p>
       </CardContent>
@@ -80,14 +82,13 @@ export default function BudgetFlowPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [authSubscription, setAuthSubscription] = useState<Subscription | null>(null);
 
-
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
   const [isAddSavingsGoalSheetOpen, setIsAddSavingsGoalSheetOpen] = useState(false);
-  const [isAddFundsSheetOpen, setIsAddFundsSheetOpen] = useState(false); // New state
-  const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null); // New state
-
+  const [isAddFundsSheetOpen, setIsAddFundsSheetOpen] = useState(false); 
+  const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null); 
 
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
@@ -100,11 +101,16 @@ export default function BudgetFlowPage() {
 
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   const [goalToEdit, setGoalToEdit] = useState<SavingsGoal | null>(null);
+
   const [isDeleteExpenseDialogOpen, setIsDeleteExpenseDialogOpen] = useState(false);
   const [isDeleteSavingsGoalDialogOpen, setIsDeleteSavingsGoalDialogOpen] = useState(false);
+
   const [expenseIdToDelete, setExpenseIdToDelete] = useState<string | null>(null);
   const [goalIdToDelete, setGoalIdToDelete] = useState<string | null>(null);
   const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined);
+  
+  const [selectedPieCategory, setSelectedPieCategory] = useState<ExpenseCategory | null>(null);
+
 
   const { toast } = useToast();
 
@@ -192,7 +198,7 @@ export default function BudgetFlowPage() {
   const fetchExpenses = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('expenses')
-      .select('*')
+      .select('*') // Selects all columns from expenses table
       .eq('user_id', userId)
       .order('date', { ascending: false });
 
@@ -221,6 +227,7 @@ export default function BudgetFlowPage() {
     }
   }, [toast]);
 
+
   useEffect(() => {
     let isDataEffectMounted = true;
     if (!isLoadingAuth && user?.id) {
@@ -242,39 +249,54 @@ export default function BudgetFlowPage() {
     }
     return () => { isDataEffectMounted = false; };
   }, [user, isLoadingAuth, fetchProfile, fetchExpenses, fetchSavingsGoals]);
-
+  
 
   const availableYears = useMemo(() => {
     const yearsFromExpenses = new Set(expenses.map(exp => new Date(exp.date).getFullYear()));
     const currentYear = new Date().getFullYear();
     yearsFromExpenses.add(currentYear);
     yearsFromExpenses.add(currentYear - 1);
-    yearsFromExpenses.add(currentYear + 1);
+    yearsFromExpenses.add(currentYear + 1); 
     return Array.from(yearsFromExpenses).sort((a, b) => b - a);
   }, [expenses]);
 
-  const filteredExpenses = useMemo(() => {
+  const expensesForSelectedMonthYear = useMemo(() => {
     return expenses.filter(exp => {
       const expenseDate = new Date(exp.date);
       return expenseDate.getMonth() === selectedMonth && expenseDate.getFullYear() === selectedYear;
     });
   }, [expenses, selectedMonth, selectedYear]);
 
-  const totalSpent = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
+  const totalSpendingForMonth = useMemo(() => {
+    return expensesForSelectedMonthYear.reduce((sum, exp) => sum + exp.amount, 0);
+  }, [expensesForSelectedMonthYear]);
+
+  const filteredExpensesToList = useMemo(() => {
+    if (selectedPieCategory) {
+      return expensesForSelectedMonthYear.filter(exp => exp.category === selectedPieCategory);
+    }
+    return expensesForSelectedMonthYear;
+  }, [expensesForSelectedMonthYear, selectedPieCategory]);
+
+  const totalDisplayedInList = useMemo(() => {
+    return filteredExpensesToList.reduce((sum, exp) => sum + exp.amount, 0);
+  }, [filteredExpensesToList]);
+
+  const budgetExceeded = budgetThreshold !== null && totalSpendingForMonth > budgetThreshold;
+
 
   useEffect(() => {
-    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0) {
+    if (user && !isLoadingData && budgetThreshold !== null && expensesForSelectedMonthYear.length > 0) {
       checkAndAwardUnderBudgetMonth(
         user,
-        totalSpent,
+        totalSpendingForMonth,
         budgetThreshold,
         selectedMonth,
         selectedYear,
         toast
       );
     }
-  }, [user, isLoadingData, filteredExpenses, totalSpent, budgetThreshold, selectedMonth, selectedYear, toast]);
+  }, [user, isLoadingData, expensesForSelectedMonthYear, totalSpendingForMonth, budgetThreshold, selectedMonth, selectedYear, toast]);
 
 
   const fetchNewTip = useCallback(async () => {
@@ -282,7 +304,7 @@ export default function BudgetFlowPage() {
     setIsLoadingTip(true);
     try {
       const tipInput = {
-        financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalSpent, selectedCurrency)}. Budget: ${budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'Not set'}.`,
+        financialSituation: `User is tracking expenses. Total spent this period: ${formatCurrency(totalDisplayedInList, selectedCurrency)}. Budget: ${budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'Not set'}.`,
         riskTolerance: "Moderate",
         investmentInterests: "Saving money, budgeting effectively."
       };
@@ -294,13 +316,14 @@ export default function BudgetFlowPage() {
     } finally {
       setIsLoadingTip(false);
     }
-  }, [user, totalSpent, selectedCurrency, budgetThreshold, isLoadingData, isLoadingAuth]);
+  }, [user, totalDisplayedInList, selectedCurrency, budgetThreshold, isLoadingData, isLoadingAuth]);
 
   useEffect(() => {
-    if (user && !isLoadingData && !isLoadingAuth) {
+    // Fetch initial tip only if user is loaded, data is ready, and no tip exists yet, and not currently loading one.
+    if (user && !isLoadingData && !isLoadingAuth && !financialTip && !isLoadingTip) {
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]);
+  }, [user, isLoadingData, isLoadingAuth, financialTip, isLoadingTip, fetchNewTip]);
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
@@ -409,6 +432,7 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast]);
 
+
   const handleOpenAddFundsSheet = useCallback((goal: SavingsGoal) => {
     setGoalToAddTo(goal);
     setIsAddFundsSheetOpen(true);
@@ -420,7 +444,6 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
-      // Fetch the current goal to ensure we have the latest current_amount
       const { data: currentGoalData, error: fetchError } = await supabase
         .from('savings_goals')
         .select('current_amount, target_amount')
@@ -532,12 +555,12 @@ export default function BudgetFlowPage() {
 
 
   const handleExportSummary = () => {
-    if (filteredExpenses.length === 0) {
-      toast({ title: "No Data", description: "No expenses in the selected month to export.", variant: "default" });
+    if (filteredExpensesToList.length === 0) {
+      toast({ title: "No Data", description: "No expenses in the selected month/category to export.", variant: "default" });
       return;
     }
-    const headers = "ID,Date,Category,Description,Amount\n";
-    const csvContent = filteredExpenses.map(e =>
+    const headers = "ID,Date,Category,Description,Amount\n"; // Removed IsAutoGenerated
+    const csvContent = filteredExpensesToList.map(e =>
       `${e.id},${format(e.date, 'yyyy-MM-dd')},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)}`
     ).join("\n");
     const fullCsv = headers + csvContent;
@@ -547,13 +570,13 @@ export default function BudgetFlowPage() {
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `budgetflow_summary_${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}.csv`);
+      link.setAttribute("download", `budgetflow_summary_${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}${selectedPieCategory ? '_'+selectedPieCategory : ''}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast({ title: "Export Successful", description: "Your expense summary for the selected month has been downloaded." });
+      toast({ title: "Export Successful", description: "Your expense summary has been downloaded." });
     } else {
        toast({ title: "Export Failed", description: "Your browser does not support this feature.", variant: "destructive" });
     }
@@ -619,6 +642,10 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast]);
 
+  const handleCategoryChartClick = useCallback((category: ExpenseCategory | null) => {
+    setSelectedPieCategory(prevCategory => category === prevCategory ? null : category);
+  }, []);
+
   if (isLoadingAuth || (user && isLoadingData)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -636,11 +663,13 @@ export default function BudgetFlowPage() {
           setExpenseToEdit(null);
           setIsAddExpenseSheetOpen(true);
         }}
-        totalSpent={totalSpent}
+        totalSpent={totalSpendingForMonth} 
         budgetThreshold={budgetThreshold}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={handleCurrencyChange}
         currencies={SUPPORTED_CURRENCIES}
+        selectedPieCategory={selectedPieCategory}
+        onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
       />
 
       <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 space-y-3 sm:space-y-4">
@@ -649,7 +678,7 @@ export default function BudgetFlowPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-sm sm:text-base">Budget Exceeded!</AlertTitle>
             <AlertDescription className="text-xs sm:text-sm">
-              You have spent {formatCurrency(totalSpent, selectedCurrency)} for {format(new Date(selectedYear, selectedMonth), 'MMMM yyyy')}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
+              You have spent {formatCurrency(totalSpendingForMonth, selectedCurrency)} for {format(new Date(selectedYear, selectedMonth), 'MMMM yyyy')}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
             </AlertDescription>
           </Alert>
         )}
@@ -657,13 +686,15 @@ export default function BudgetFlowPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           <div className="lg:col-span-2 space-y-3 sm:space-y-4">
             <Card className="shadow-lg">
-              <CardHeader className="p-3 sm:p-4">
+              <CardHeader className="p-2 xs:p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 sm:h-6 text-primary" />
                     <CardTitle><h2 className="font-headline text-base sm:text-lg">Recent Expenses</h2></CardTitle>
                   </div>
-                  {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
+                   <div className="flex items-center gap-2">
+                     {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
+                  </div>
                 </div>
                 <div className="flex flex-row items-center gap-2">
                     <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground shrink-0">
@@ -673,7 +704,10 @@ export default function BudgetFlowPage() {
                     <div className="flex flex-row gap-2 w-full">
                       <Select
                           value={selectedMonth.toString()}
-                          onValueChange={(value) => setSelectedMonth(parseInt(value))}
+                          onValueChange={(value) => {
+                            setSelectedMonth(parseInt(value));
+                            setSelectedPieCategory(null); 
+                          }}
                       >
                           <SelectTrigger className="flex-grow basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Month" />
@@ -688,7 +722,10 @@ export default function BudgetFlowPage() {
                       </Select>
                       <Select
                           value={selectedYear.toString()}
-                          onValueChange={(value) => setSelectedYear(parseInt(value))}
+                          onValueChange={(value) => {
+                            setSelectedYear(parseInt(value));
+                            setSelectedPieCategory(null); 
+                          }}
                       >
                           <SelectTrigger className="flex-grow basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Year" />
@@ -705,26 +742,31 @@ export default function BudgetFlowPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-1.5 xs:p-2 sm:p-3 pt-0">
-                 {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
+                 {filteredExpensesToList.length === 0 && !isLoadingData && !isLoadingAuth && !selectedPieCategory ? (
                     <div className="text-center text-muted-foreground py-4 xs:py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
                       <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4" />
                       <p className="text-xs xs:text-sm sm:text-lg font-semibold">No expenses for this period.</p>
                       <p className="text-[10px] xs:text-xs sm:text-sm">Add expenses or change the date.</p>
                     </div>
                   ) : (
-                    <ExpenseList
-                        expenses={filteredExpenses}
-                        currency={selectedCurrency}
-                        onEditExpense={handleEditExpenseClick}
-                        onDeleteExpense={handleDeleteExpenseClick}
-                    />
+                    <ScrollArea className="h-[240px] sm:h-[280px] md:h-[320px] lg:h-[360px] rounded-md">
+                      <ExpenseList
+                          expenses={filteredExpensesToList}
+                          currency={selectedCurrency}
+                          onEditExpense={handleEditExpenseClick}
+                          onDeleteExpense={handleDeleteExpenseClick}
+                          selectedPieCategory={selectedPieCategory}
+                          onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
+                          totalFilteredExpenses={totalDisplayedInList} 
+                      />
+                    </ScrollArea>
                   )}
               </CardContent>
             </Card>
             
             {user && (
               <Card className="shadow-lg">
-                <CardHeader className="p-3 sm:p-4">
+                <CardHeader className="p-2 xs:p-3 sm:p-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <PiggyBank className="h-5 w-5 sm:h-6 text-primary" />
@@ -764,7 +806,7 @@ export default function BudgetFlowPage() {
           </div>
 
           <div className="space-y-3 sm:space-y-4">
-             {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
+             {expensesForSelectedMonthYear.length === 0 && !isLoadingData && !isLoadingAuth ? (
                 <Card className="shadow-lg h-[200px] xs:h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-3 sm:p-4">
                    <div>
                     <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4 mx-auto" />
@@ -772,7 +814,12 @@ export default function BudgetFlowPage() {
                    </div>
                 </Card>
               ) : (
-                user && <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
+                user && <ExpenseChart 
+                    expenses={expensesForSelectedMonthYear} 
+                    currency={selectedCurrency}
+                    onCategoryClick={handleCategoryChartClick}
+                    selectedCategory={selectedPieCategory}
+                  />
               )}
             {user && <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />}
           </div>
@@ -828,7 +875,7 @@ export default function BudgetFlowPage() {
           isOpen={isDeleteExpenseDialogOpen}
           onOpenChange={setIsDeleteExpenseDialogOpen}
           onConfirmDelete={confirmDeleteExpense}
-          itemName="this expense"
+          itemName={expenses.find(e=>e.id === expenseIdToDelete)?.description || "this expense"}
         />
       )}
       {user && isDeleteSavingsGoalDialogOpen && (
@@ -842,4 +889,3 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
-
