@@ -30,13 +30,13 @@ const AddExpenseSheet = dynamic(() => import('@/components/app/AddExpenseSheet')
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
     <Card className="shadow-lg">
-      <CardHeader>
-        <CardTitle><h2 className="font-headline">Expense Breakdown</h2></CardTitle>
-        <CardDescription>Loading chart data...</CardDescription>
+      <CardHeader className="p-3 sm:p-4">
+        <CardTitle><h2 className="font-headline text-base sm:text-xl">Expense Breakdown</h2></CardTitle>
+        <CardDescription className="text-xs sm:text-sm">Loading chart data...</CardDescription>
       </CardHeader>
-      <CardContent className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-2">Loading chart...</p>
+      <CardContent className="h-[200px] sm:h-[220px] md:h-[250px] flex flex-col items-center justify-center text-muted-foreground">
+        <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary" />
+        <p className="mt-2 text-xs sm:text-sm">Loading chart...</p>
       </CardContent>
     </Card>
   ),
@@ -46,11 +46,11 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
   ssr: false,
   loading: () => (
      <Card className="shadow-lg">
-      <CardHeader>
-          <CardTitle className="font-headline text-accent">Smart Financial Tip</CardTitle>
+      <CardHeader className="p-3 sm:p-4">
+          <CardTitle className="font-headline text-accent text-base sm:text-xl"><h2>Smart Financial Tip</h2></CardTitle>
       </CardHeader>
-      <CardContent className="h-20 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <CardContent className="h-12 sm:h-16 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 sm:h-6 animate-spin text-muted-foreground" />
       </CardContent>
     </Card>
   )
@@ -64,6 +64,8 @@ export default function BudgetFlowPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [authSubscription, setAuthSubscription] = useState<Subscription | null>(null);
+
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
@@ -82,37 +84,46 @@ export default function BudgetFlowPage() {
 
   const { toast } = useToast();
 
-  useEffect(() => {
+ useEffect(() => {
     let isMounted = true;
-    let authSub: Subscription | null = null;
     setIsLoadingAuth(true);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
         setUser(session?.user ?? null);
+        if (!session) {
+            setIsLoadingAuth(false);
+        }
       }
     }).catch(error => {
+      console.error("Error getting initial session:", error);
       if (isMounted) {
-        console.error("Error fetching initial session:", error);
+        setUser(null);
         setIsLoadingAuth(false);
       }
     });
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      authSub = subscription;
-      if (isMounted) {
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!isMounted) return;
+        
         setUser(session?.user ?? null);
-        if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_DELETED") {
-           setIsLoadingAuth(false);
+        
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          setIsLoadingAuth(false);
+        }
+        if (event === 'SIGNED_OUT' && window.location.pathname !== '/login') {
+          router.replace('/login');
         }
       }
-    });
+    );
+    setAuthSubscription(subscription);
 
     return () => {
       isMounted = false;
-      authSub?.unsubscribe();
+      authSubscription?.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!isLoadingAuth && !user) {
@@ -141,7 +152,7 @@ export default function BudgetFlowPage() {
       } else if (data) {
         if (data.is_deactivated) {
           toast({ title: 'Account Deactivated', description: 'This account is deactivated.', variant: 'destructive'});
-          await supabase.auth.signOut(); 
+          await supabase.auth.signOut();
           router.replace('/login');
           return;
         }
@@ -234,7 +245,7 @@ export default function BudgetFlowPage() {
     }
   }, [fetchNewTip, user, isLoadingData, isLoadingAuth]);
 
-  const handleSaveExpense = async (expenseData: ExpenseFormData) => {
+  const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
       toast({ title: "Error", description: "You must be logged in to save an expense.", variant: "destructive" });
       return;
@@ -284,19 +295,19 @@ export default function BudgetFlowPage() {
       console.error("Failed to save expense:", error);
       toast({ title: "Save Error", description: error.message || "Could not save expense.", variant: "destructive" });
     }
-  };
+  }, [user, toast, expenseToEdit]);
 
   const handleEditExpenseClick = useCallback((expense: Expense) => {
     setExpenseToEdit(expense);
     setIsAddExpenseSheetOpen(true);
-  }, [setExpenseToEdit, setIsAddExpenseSheetOpen]);
+  }, []);
 
   const handleDeleteExpenseClick = useCallback((id: string) => {
     setExpenseIdToDelete(id);
     setIsDeleteExpenseDialogOpen(true);
-  }, [setExpenseIdToDelete, setIsDeleteExpenseDialogOpen]);
+  }, []);
 
-  const confirmDeleteExpense = async () => {
+  const confirmDeleteExpense = useCallback(async () => {
     if (!user || !expenseIdToDelete) {
       toast({ title: "Error", description: "User or expense ID missing.", variant: "destructive" });
       return;
@@ -319,7 +330,7 @@ export default function BudgetFlowPage() {
       setIsDeleteExpenseDialogOpen(false);
       setExpenseIdToDelete(null);
     }
-  };
+  }, [user, expenseIdToDelete, toast]);
 
 
   const handleExportSummary = () => {
@@ -350,16 +361,16 @@ export default function BudgetFlowPage() {
     }
   };
 
-  const handleSetThreshold = async (newThreshold: number | null) => {
+  const handleSetThreshold = useCallback(async (newThreshold: number | null) => {
     if (!user) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
     try {
-      const profileDataToUpsert: Partial<Profile> = { 
-        id: user.id, 
+      const profileDataToUpsert: Partial<Profile> = {
+        id: user.id,
         budget_threshold: newThreshold,
-        selected_currency: selectedCurrency, 
+        selected_currency: selectedCurrency,
         updated_at: new Date().toISOString(),
       };
 
@@ -381,9 +392,9 @@ export default function BudgetFlowPage() {
       console.error("Failed to set budget threshold:", error);
       toast({ title: "Update Error", description: error.message || "Could not update budget.", variant: "destructive" });
     }
-  };
+  }, [user, selectedCurrency, toast]);
 
-  const handleCurrencyChange = async (newCurrency: CurrencyCode) => {
+  const handleCurrencyChange = useCallback(async (newCurrency: CurrencyCode) => {
      if (!user) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
@@ -392,7 +403,7 @@ export default function BudgetFlowPage() {
       const profileDataToUpsert: Partial<Profile> = {
         id: user.id,
         selected_currency: newCurrency,
-        budget_threshold: budgetThreshold,
+        budget_threshold: budgetThreshold, // Preserve existing budget threshold
         updated_at: new Date().toISOString(),
       };
 
@@ -410,7 +421,7 @@ export default function BudgetFlowPage() {
       console.error("Failed to update currency:", error);
       toast({ title: "Update Error", description: error.message || "Could not update currency.", variant: "destructive" });
     }
-  };
+  }, [user, budgetThreshold, toast]);
 
   if (isLoadingAuth || (user && isLoadingData)) {
     return (
@@ -436,77 +447,77 @@ export default function BudgetFlowPage() {
         currencies={SUPPORTED_CURRENCIES}
       />
 
-      <main className="flex-grow container mx-auto p-4 md:p-6 space-y-6">
+      <main className="flex-grow container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
         {budgetExceeded && (
           <Alert variant="destructive" className="shadow-md">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Budget Exceeded!</AlertTitle>
-            <AlertDescription>
+            <AlertTitle className="text-sm sm:text-base">Budget Exceeded!</AlertTitle>
+            <AlertDescription className="text-xs sm:text-sm">
               You have spent {formatCurrency(totalSpent, selectedCurrency)} for {format(new Date(selectedYear, selectedMonth), 'MMMM yyyy')}, which is over your budget of {budgetThreshold ? formatCurrency(budgetThreshold, selectedCurrency) : 'N/A'}.
             </AlertDescription>
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <Card className="shadow-lg">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+              <CardHeader className="p-3 sm:p-4 md:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 sm:mb-4">
                   <div className="flex items-center gap-2">
-                    <BarChart3 className="h-6 w-6 text-primary" />
-                    <CardTitle className="font-headline"><h2>Recent Expenses</h2></CardTitle>
+                    <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                    <CardTitle><h2 className="font-headline text-lg sm:text-xl">Recent Expenses</h2></CardTitle>
                   </div>
                   {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <CalendarDays className="h-4 w-4" />
-                        <span>Showing expenses for:</span>
+                    <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                        <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <span>Showing for:</span>
                     </div>
-                    <div className="flex gap-2">
-                    <Select
-                        value={selectedMonth.toString()}
-                        onValueChange={(value) => setSelectedMonth(parseInt(value))}
-                    >
-                        <SelectTrigger className="w-full sm:w-[130px] h-9">
-                        <SelectValue placeholder="Month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i} value={i.toString()}>
-                            {format(new Date(selectedYear, i), 'MMMM')}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={selectedYear.toString()}
-                        onValueChange={(value) => setSelectedYear(parseInt(value))}
-                    >
-                        <SelectTrigger className="w-full sm:w-[100px] h-9">
-                        <SelectValue placeholder="Year" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        {availableYears.map(year => (
-                            <SelectItem key={year} value={year.toString()}>
-                            {year}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="flex flex-row gap-2 w-full sm:w-auto">
+                      <Select
+                          value={selectedMonth.toString()}
+                          onValueChange={(value) => setSelectedMonth(parseInt(value))}
+                      >
+                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[130px] h-9 text-xs sm:text-sm">
+                          <SelectValue placeholder="Month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => (
+                              <SelectItem key={i} value={i.toString()} className="text-xs sm:text-sm">
+                              {format(new Date(selectedYear, i), 'MMMM')}
+                              </SelectItem>
+                          ))}
+                          </SelectContent>
+                      </Select>
+                      <Select
+                          value={selectedYear.toString()}
+                          onValueChange={(value) => setSelectedYear(parseInt(value))}
+                      >
+                          <SelectTrigger className="flex-grow basis-0 sm:flex-grow-0 sm:basis-auto sm:w-[100px] h-9 text-xs sm:text-sm">
+                          <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {availableYears.map(year => (
+                              <SelectItem key={year} value={year.toString()} className="text-xs sm:text-sm">
+                              {year}
+                              </SelectItem>
+                          ))}
+                          </SelectContent>
+                      </Select>
                     </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-2 sm:p-3 md:p-4 pt-0">
                  {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
-                    <div className="text-center text-muted-foreground py-8 min-h-[200px] flex flex-col items-center justify-center">
-                      <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-lg font-semibold">No expenses for this period.</p>
-                      <p>Try selecting a different month/year or add new expenses.</p>
+                    <div className="text-center text-muted-foreground py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
+                      <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
+                      <p className="text-sm sm:text-lg font-semibold">No expenses for this period.</p>
+                      <p className="text-xs sm:text-sm">Add expenses or change the date.</p>
                     </div>
                   ) : (
-                    <ExpenseList 
-                        expenses={filteredExpenses} 
+                    <ExpenseList
+                        expenses={filteredExpenses}
                         currency={selectedCurrency}
                         onEditExpense={handleEditExpenseClick}
                         onDeleteExpense={handleDeleteExpenseClick}
@@ -516,12 +527,12 @@ export default function BudgetFlowPage() {
             </Card>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
              {expenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
-                <Card className="shadow-lg h-[388px] flex items-center justify-center text-center text-muted-foreground p-4">
+                <Card className="shadow-lg h-[230px] sm:h-[288px] flex items-center justify-center text-center text-muted-foreground p-4">
                    <div>
-                    <BarChart3 className="h-12 w-12 text-muted-foreground mb-4 mx-auto" />
-                    <p>Your expense chart will appear here once you add some expenses.</p>
+                    <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4 mx-auto" />
+                    <p className="text-sm sm:text-base">Your expense chart will appear here.</p>
                    </div>
                 </Card>
               ) : (
@@ -540,7 +551,7 @@ export default function BudgetFlowPage() {
           setIsOpen={(isOpen) => {
               setIsAddExpenseSheetOpen(isOpen);
               if (!isOpen) {
-                  setExpenseToEdit(null); 
+                  setExpenseToEdit(null);
               }
           }}
           onSaveExpense={handleSaveExpense}
@@ -559,4 +570,3 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
-
