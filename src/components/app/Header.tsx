@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2 } from 'lucide-react';
+import { Wallet, PlusCircle, LogOut, UserCircle, Loader2, Trash2, FilterX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { type CurrencyCode } from '@/types';
+import { type CurrencyCode, type ExpenseCategory } from '@/types';
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
@@ -33,11 +33,13 @@ const DeleteAccountDialog = dynamic(() => import('./DeleteAccountDialog'), { ssr
 interface HeaderProps {
   user: User | null;
   onAddExpenseClick: () => void;
-  totalSpent: number;
+  totalSpent: number; // This should be the total of currently displayed/filtered expenses
   budgetThreshold?: number | null;
   selectedCurrency: CurrencyCode;
   onCurrencyChange: (currencyCode: CurrencyCode) => void;
   currencies: ReadonlyArray<{ code: CurrencyCode; name: string; symbol: string }>;
+  selectedPieCategory: ExpenseCategory | null;
+  onClearPieCategoryFilter: () => void;
 }
 
 export default function AppHeader({
@@ -47,7 +49,9 @@ export default function AppHeader({
   budgetThreshold,
   selectedCurrency,
   onCurrencyChange,
-  currencies
+  currencies,
+  selectedPieCategory,
+  onClearPieCategoryFilter
 }: HeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -55,7 +59,7 @@ export default function AppHeader({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null;
+  const budgetRemaining = budgetThreshold ? budgetThreshold - totalSpent : null; // Reflects based on displayed total
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -167,19 +171,30 @@ export default function AppHeader({
                 </Select>
                 
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Spent</p>
+                  <p className="text-xs text-muted-foreground">{selectedPieCategory ? 'Filtered' : 'Spent'}</p>
                   <p className="text-sm font-semibold">
                     {formatCurrency(totalSpent, selectedCurrency)}
                   </p>
                 </div>
 
-                {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && (
+                {budgetThreshold !== null && budgetThreshold !== undefined && budgetRemaining !== null && !selectedPieCategory && (
                   <div className="text-center">
                      <p className="text-xs text-muted-foreground">Rem.</p>
                     <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
                   </div>
+                )}
+                 {selectedPieCategory && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClearPieCategoryFilter}
+                    className="h-8 text-xs px-2 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
+                    aria-label={`Clear ${selectedPieCategory} filter`}
+                  >
+                    <FilterX className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">{selectedPieCategory}</span>
+                  </Button>
                 )}
 
                 <Button
@@ -230,7 +245,7 @@ export default function AppHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-               null // No user menu if not logged in
+               null 
             )}
           </div>
         </div>
