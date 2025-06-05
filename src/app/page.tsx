@@ -13,18 +13,20 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle } from 'lucide-react';
-import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal } from '@/types';
-import { SUPPORTED_CURRENCIES } from '@/types';
+import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle, Repeat, FilterX, ListFilter } from 'lucide-react';
+import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal, RecurringExpense, RecurrenceType } from '@/types';
+import { SUPPORTED_CURRENCIES, EXPENSE_CATEGORIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
 import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
+import type { RecurringExpenseFormData } from '@/components/app/AddRecurringExpenseSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addMonths, addWeeks, getDay, endOfMonth as dateFnsEndOfMonth, isBefore, isSameDay, startOfDay } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
 import { checkAndAwardUnderBudgetMonth } from '@/lib/achievementsHelper';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 // Dynamically import components
@@ -36,9 +38,17 @@ const AddSavingsGoalSheet = dynamic(() => import('@/components/app/AddSavingsGoa
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
 });
-const AddFundsToGoalSheet = dynamic(() => import('@/components/app/AddFundsToGoalSheet'), { // New dynamic import
+const AddFundsToGoalSheet = dynamic(() => import('@/components/app/AddFundsToGoalSheet'), { 
   ssr: false,
   loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
+});
+const AddRecurringExpenseSheet = dynamic(() => import('@/components/app/AddRecurringExpenseSheet'), {
+  ssr: false,
+  loading: () => <div className="w-full h-screen fixed inset-0 z-50 bg-black/10 backdrop-blur-sm" aria-hidden="true" />
+});
+const RecurringExpenseList = dynamic(() => import('@/components/app/RecurringExpenseList'), {
+  ssr: false,
+  loading: () => <div className="p-4 text-center text-muted-foreground">Loading recurring expenses...</div>
 });
 const ExpenseChart = dynamic(() => import('@/components/app/ExpenseChart'), {
   loading: () => (
@@ -71,6 +81,7 @@ const SmartTipCard = dynamic(() => import('@/components/app/SmartTipCard'), {
 const SetThresholdDialog = dynamic(() => import('@/components/app/SetThresholdDialog'), { ssr: false });
 const DeleteExpenseDialog = dynamic(() => import('@/components/app/DeleteExpenseDialog'), { ssr: false });
 const DeleteSavingsGoalDialog = dynamic(() => import('@/components/app/DeleteSavingsGoalDialog'), { ssr: false });
+const DeleteRecurringExpenseDialog = dynamic(() => import('@/components/app/DeleteRecurringExpenseDialog'), { ssr: false });
 
 
 export default function BudgetFlowPage() {
@@ -80,14 +91,15 @@ export default function BudgetFlowPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [authSubscription, setAuthSubscription] = useState<Subscription | null>(null);
 
-
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+
   const [isAddExpenseSheetOpen, setIsAddExpenseSheetOpen] = useState(false);
   const [isAddSavingsGoalSheetOpen, setIsAddSavingsGoalSheetOpen] = useState(false);
-  const [isAddFundsSheetOpen, setIsAddFundsSheetOpen] = useState(false); // New state
-  const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null); // New state
-
+  const [isAddFundsSheetOpen, setIsAddFundsSheetOpen] = useState(false); 
+  const [isAddRecurringExpenseSheetOpen, setIsAddRecurringExpenseSheetOpen] = useState(false);
+  const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null); 
 
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
   const [isLoadingTip, setIsLoadingTip] = useState(false);
@@ -100,11 +112,20 @@ export default function BudgetFlowPage() {
 
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   const [goalToEdit, setGoalToEdit] = useState<SavingsGoal | null>(null);
+  const [recurringExpenseToEdit, setRecurringExpenseToEdit] = useState<RecurringExpense | null>(null);
+
   const [isDeleteExpenseDialogOpen, setIsDeleteExpenseDialogOpen] = useState(false);
   const [isDeleteSavingsGoalDialogOpen, setIsDeleteSavingsGoalDialogOpen] = useState(false);
+  const [isDeleteRecurringExpenseDialogOpen, setIsDeleteRecurringExpenseDialogOpen] = useState(false);
+
   const [expenseIdToDelete, setExpenseIdToDelete] = useState<string | null>(null);
   const [goalIdToDelete, setGoalIdToDelete] = useState<string | null>(null);
   const [goalNameToDelete, setGoalNameToDelete] = useState<string | undefined>(undefined);
+  const [recurringExpenseIdToDelete, setRecurringExpenseIdToDelete] = useState<string | null>(null);
+  const [recurringExpenseNameToDelete, setRecurringExpenseNameToDelete] = useState<string | undefined>(undefined);
+  
+  const [selectedPieCategory, setSelectedPieCategory] = useState<ExpenseCategory | null>(null);
+
 
   const { toast } = useToast();
 
@@ -221,6 +242,129 @@ export default function BudgetFlowPage() {
     }
   }, [toast]);
 
+  const fetchRecurringExpenses = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from('recurring_expenses')
+      .select('*')
+      .eq('user_id', userId)
+      .order('next_due_date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching recurring expenses:', error);
+      toast({ title: 'Recurring Expenses Load Error', description: `Could not load recurring expenses: ${error.message}`, variant: 'destructive' });
+      setRecurringExpenses([]);
+    } else if (data) {
+      setRecurringExpenses(data.map(re => ({
+        ...re,
+        start_date: parseISO(re.start_date),
+        next_due_date: parseISO(re.next_due_date),
+        end_date: re.end_date ? parseISO(re.end_date) : null,
+      })) as RecurringExpense[]);
+    }
+  }, [toast]);
+
+  const processRecurringExpenses = useCallback(async (currentRecurringExpenses: RecurringExpense[]) => {
+    if (!user) return;
+    const today = startOfDay(new Date());
+    let newExpensesCreated = false;
+
+    for (const re of currentRecurringExpenses) {
+      if (!re.is_active) continue;
+      if (re.end_date && isBefore(re.end_date, today)) continue; // Ended
+
+      let nextDueDate = parseISO(re.next_due_date as unknown as string); // Ensure it's a Date object
+
+      while (isBefore(nextDueDate, today) || isSameDay(nextDueDate, today)) {
+        // Check if an expense for this recurring_expense_id and due_date already exists
+        const { data: existing, error: checkError } = await supabase
+          .from('expenses')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('recurring_expense_id', re.id)
+          .eq('date', format(nextDueDate, 'yyyy-MM-dd'))
+          .limit(1);
+
+        if (checkError) {
+          console.error('Error checking for existing recurring instance:', checkError);
+          break; 
+        }
+
+        if (existing && existing.length > 0) {
+          // Instance already exists, just advance date if needed
+        } else {
+           // Create new expense instance
+          const newExpenseData = {
+            user_id: user.id,
+            description: re.description,
+            amount: re.amount,
+            category: re.category as ExpenseCategory,
+            date: format(nextDueDate, 'yyyy-MM-dd'),
+            recurring_expense_id: re.id,
+            is_auto_generated: true,
+          };
+          const { data: savedExpense, error: insertError } = await supabase
+            .from('expenses')
+            .insert(newExpenseData)
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('Error auto-creating recurring expense instance:', insertError);
+            break; 
+          }
+          if (savedExpense) {
+            setExpenses(prev => [{ ...savedExpense, date: parseISO(savedExpense.date) } as Expense, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            newExpensesCreated = true;
+          }
+        }
+
+        // Advance next_due_date for the recurring expense template
+        let advancedDate;
+        if (re.recurrence_type === 'monthly' && re.day_of_month) {
+            let tempDate = addMonths(nextDueDate, 1);
+            const lastDayOfNextMonth = dateFnsEndOfMonth(tempDate).getDate();
+            advancedDate = new Date(tempDate.getFullYear(), tempDate.getMonth(), Math.min(re.day_of_month, lastDayOfNextMonth));
+        } else if (re.recurrence_type === 'weekly' && re.day_of_week !== null) {
+            advancedDate = addWeeks(nextDueDate, 1);
+            // Adjust to the correct day_of_week if it drifted (shouldn't typically with addWeeks)
+            while(getDay(advancedDate) !== re.day_of_week) {
+                advancedDate = addDays(advancedDate,1); // This might need more robust logic for specific day finding
+            }
+        } else {
+            // Fallback for other types or if logic is missing (e.g. daily, yearly not implemented yet)
+            console.warn(`Unsupported recurrence type for advancing date: ${re.recurrence_type}`);
+            break; 
+        }
+        
+        if (advancedDate) {
+            nextDueDate = advancedDate;
+        } else {
+            break; // Could not advance date
+        }
+
+
+        if (re.end_date && isBefore(re.end_date, nextDueDate)) {
+          // Next due date is past end_date, stop generating for this one
+          const { error: updateError } = await supabase
+            .from('recurring_expenses')
+            .update({ next_due_date: format(nextDueDate, 'yyyy-MM-dd'), is_active: false })
+            .eq('id', re.id);
+          if (updateError) console.error("Error deactivating recurring expense:", updateError);
+          break;
+        } else {
+          const { error: updateError } = await supabase
+            .from('recurring_expenses')
+            .update({ next_due_date: format(nextDueDate, 'yyyy-MM-dd') })
+            .eq('id', re.id);
+          if (updateError) console.error("Error updating next_due_date:", updateError);
+        }
+      }
+    }
+    if (newExpensesCreated) {
+      fetchRecurringExpenses(user.id); // Refresh recurring expenses list to show updated next_due_dates
+    }
+  }, [user, supabase, setExpenses, fetchRecurringExpenses]);
+
   useEffect(() => {
     let isDataEffectMounted = true;
     if (!isLoadingAuth && user?.id) {
@@ -229,19 +373,32 @@ export default function BudgetFlowPage() {
         fetchProfile(user.id),
         fetchExpenses(user.id),
         fetchSavingsGoals(user.id),
+        fetchRecurringExpenses(user.id).then((fetchedREs) => {
+            // After fetching recurring expenses, process them
+            // Need to ensure fetchedREs (the result of fetchRecurringExpenses) is available here.
+            // fetchRecurringExpenses updates state, so use the state value.
+            // This will be handled by the subsequent effect on `recurringExpenses`
+        })
       ]).finally(() => {
         if (isDataEffectMounted) setIsLoadingData(false);
       });
     } else if (!isLoadingAuth && !user) {
       setExpenses([]);
       setSavingsGoals([]);
+      setRecurringExpenses([]);
       setBudgetThreshold(null);
       setSelectedCurrency('USD');
       setFinancialTip(null);
       if (isDataEffectMounted) setIsLoadingData(false);
     }
     return () => { isDataEffectMounted = false; };
-  }, [user, isLoadingAuth, fetchProfile, fetchExpenses, fetchSavingsGoals]);
+  }, [user, isLoadingAuth, fetchProfile, fetchExpenses, fetchSavingsGoals, fetchRecurringExpenses]);
+  
+  useEffect(() => {
+    if (user && recurringExpenses.length > 0 && !isLoadingData) {
+      processRecurringExpenses(recurringExpenses);
+    }
+  }, [user, recurringExpenses, isLoadingData, processRecurringExpenses]);
 
 
   const availableYears = useMemo(() => {
@@ -249,22 +406,26 @@ export default function BudgetFlowPage() {
     const currentYear = new Date().getFullYear();
     yearsFromExpenses.add(currentYear);
     yearsFromExpenses.add(currentYear - 1);
-    yearsFromExpenses.add(currentYear + 1);
+    yearsFromExpenses.add(currentYear + 1); // Allow future year selection
     return Array.from(yearsFromExpenses).sort((a, b) => b - a);
   }, [expenses]);
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(exp => {
+    let monthExpenses = expenses.filter(exp => {
       const expenseDate = new Date(exp.date);
       return expenseDate.getMonth() === selectedMonth && expenseDate.getFullYear() === selectedYear;
     });
-  }, [expenses, selectedMonth, selectedYear]);
+    if (selectedPieCategory) {
+      monthExpenses = monthExpenses.filter(exp => exp.category === selectedPieCategory);
+    }
+    return monthExpenses;
+  }, [expenses, selectedMonth, selectedYear, selectedPieCategory]);
 
   const totalSpent = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const budgetExceeded = budgetThreshold !== null && totalSpent > budgetThreshold;
 
   useEffect(() => {
-    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0) {
+    if (user && !isLoadingData && budgetThreshold !== null && filteredExpenses.length > 0 && !selectedPieCategory) {
       checkAndAwardUnderBudgetMonth(
         user,
         totalSpent,
@@ -274,7 +435,7 @@ export default function BudgetFlowPage() {
         toast
       );
     }
-  }, [user, isLoadingData, filteredExpenses, totalSpent, budgetThreshold, selectedMonth, selectedYear, toast]);
+  }, [user, isLoadingData, filteredExpenses, totalSpent, budgetThreshold, selectedMonth, selectedYear, toast, selectedPieCategory]);
 
 
   const fetchNewTip = useCallback(async () => {
@@ -300,7 +461,7 @@ export default function BudgetFlowPage() {
     if (user && !isLoadingData && !isLoadingAuth) {
       fetchNewTip();
     }
-  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]);
+  }, [fetchNewTip, user, isLoadingData, isLoadingAuth, selectedMonth, selectedYear]); // Re-fetch tip if month/year changes
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
     if (!user) {
@@ -409,6 +570,60 @@ export default function BudgetFlowPage() {
     }
   }, [user, toast]);
 
+  const handleSaveRecurringExpense = useCallback(async (recurringData: RecurringExpenseFormData, recurringId?: string) => {
+    if (!user) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    try {
+      const dataToSave = {
+        ...recurringData,
+        user_id: user.id,
+        start_date: format(recurringData.start_date, 'yyyy-MM-dd'),
+        end_date: recurringData.end_date ? format(recurringData.end_date, 'yyyy-MM-dd') : null,
+        next_due_date: format(recurringData.next_due_date || recurringData.start_date, 'yyyy-MM-dd'), // Ensure next_due_date is set
+        is_active: recurringData.is_active,
+      };
+
+      if (recurringId) {
+        const { data: updatedRecurring, error } = await supabase
+          .from('recurring_expenses')
+          .update(dataToSave)
+          .eq('id', recurringId)
+          .select()
+          .single();
+        if (error) throw error;
+        if (updatedRecurring) {
+          setRecurringExpenses(prev =>
+            prev.map(re => (re.id === updatedRecurring.id ? { ...updatedRecurring, start_date: parseISO(updatedRecurring.start_date), next_due_date: parseISO(updatedRecurring.next_due_date), end_date: updatedRecurring.end_date ? parseISO(updatedRecurring.end_date) : null } as RecurringExpense : re))
+            .sort((a,b) => new Date(a.next_due_date).getTime() - new Date(b.next_due_date).getTime())
+          );
+          toast({ title: "Recurring Expense Updated", description: `${updatedRecurring.description} successfully updated.` });
+        }
+        setRecurringExpenseToEdit(null);
+      } else {
+        const { data: savedRecurring, error } = await supabase
+          .from('recurring_expenses')
+          .insert(dataToSave)
+          .select()
+          .single();
+        if (error) throw error;
+        if (savedRecurring) {
+          setRecurringExpenses(prev =>
+            [...prev, { ...savedRecurring, start_date: parseISO(savedRecurring.start_date), next_due_date: parseISO(savedRecurring.next_due_date), end_date: savedRecurring.end_date ? parseISO(savedRecurring.end_date) : null } as RecurringExpense]
+            .sort((a,b) => new Date(a.next_due_date).getTime() - new Date(b.next_due_date).getTime())
+          );
+          toast({ title: "Recurring Expense Added", description: `${savedRecurring.description} successfully added.` });
+        }
+      }
+      processRecurringExpenses(recurringExpenses); // Re-process after add/edit
+    } catch (error: any) {
+      console.error("Failed to save recurring expense:", error);
+      toast({ title: "Save Error", description: error.message || "Could not save recurring expense.", variant: "destructive" });
+    }
+  }, [user, toast, processRecurringExpenses, recurringExpenses]);
+
+
   const handleOpenAddFundsSheet = useCallback((goal: SavingsGoal) => {
     setGoalToAddTo(goal);
     setIsAddFundsSheetOpen(true);
@@ -420,7 +635,6 @@ export default function BudgetFlowPage() {
       return;
     }
     try {
-      // Fetch the current goal to ensure we have the latest current_amount
       const { data: currentGoalData, error: fetchError } = await supabase
         .from('savings_goals')
         .select('current_amount, target_amount')
@@ -468,6 +682,11 @@ export default function BudgetFlowPage() {
     setIsAddSavingsGoalSheetOpen(true);
   }, []);
 
+  const handleEditRecurringExpenseClick = useCallback((recurringExpense: RecurringExpense) => {
+    setRecurringExpenseToEdit(recurringExpense);
+    setIsAddRecurringExpenseSheetOpen(true);
+  }, []);
+
   const handleDeleteExpenseClick = useCallback((id: string) => {
     setExpenseIdToDelete(id);
     setIsDeleteExpenseDialogOpen(true);
@@ -477,6 +696,12 @@ export default function BudgetFlowPage() {
     setGoalIdToDelete(goal.id);
     setGoalNameToDelete(goal.goal_name);
     setIsDeleteSavingsGoalDialogOpen(true);
+  }, []);
+
+  const handleDeleteRecurringExpenseClick = useCallback((re: RecurringExpense) => {
+    setRecurringExpenseIdToDelete(re.id);
+    setRecurringExpenseNameToDelete(re.description);
+    setIsDeleteRecurringExpenseDialogOpen(true);
   }, []);
 
   const confirmDeleteExpense = useCallback(async () => {
@@ -530,15 +755,35 @@ export default function BudgetFlowPage() {
     }
   }, [user, goalIdToDelete, toast]);
 
+  const confirmDeleteRecurringExpense = useCallback(async () => {
+    if (!user || !recurringExpenseIdToDelete) return;
+    try {
+      const { error } = await supabase
+        .from('recurring_expenses')
+        .delete()
+        .eq('id', recurringExpenseIdToDelete)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      setRecurringExpenses(prev => prev.filter(re => re.id !== recurringExpenseIdToDelete));
+      toast({ title: "Recurring Expense Deleted", description: `"${recurringExpenseNameToDelete}" successfully deleted.` });
+    } catch (error: any) {
+      toast({ title: "Delete Error", description: error.message || "Could not delete recurring expense.", variant: "destructive" });
+    } finally {
+      setIsDeleteRecurringExpenseDialogOpen(false);
+      setRecurringExpenseIdToDelete(null);
+      setRecurringExpenseNameToDelete(undefined);
+    }
+  }, [user, recurringExpenseIdToDelete, recurringExpenseNameToDelete, toast]);
+
 
   const handleExportSummary = () => {
     if (filteredExpenses.length === 0) {
       toast({ title: "No Data", description: "No expenses in the selected month to export.", variant: "default" });
       return;
     }
-    const headers = "ID,Date,Category,Description,Amount\n";
+    const headers = "ID,Date,Category,Description,Amount,IsAutoGenerated\n";
     const csvContent = filteredExpenses.map(e =>
-      `${e.id},${format(e.date, 'yyyy-MM-dd')},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)}`
+      `${e.id},${format(e.date, 'yyyy-MM-dd')},${e.category},"${e.description.replace(/"/g, '""')}",${e.amount.toFixed(2)},${e.is_auto_generated ? 'Yes' : 'No'}`
     ).join("\n");
     const fullCsv = headers + csvContent;
 
@@ -641,10 +886,12 @@ export default function BudgetFlowPage() {
         selectedCurrency={selectedCurrency}
         onCurrencyChange={handleCurrencyChange}
         currencies={SUPPORTED_CURRENCIES}
+        selectedPieCategory={selectedPieCategory}
+        onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
       />
 
       <main className="flex-grow container mx-auto p-2 xs:p-3 sm:p-4 space-y-3 sm:space-y-4">
-        {budgetExceeded && (
+        {budgetExceeded && !selectedPieCategory && (
           <Alert variant="destructive" className="shadow-md">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-sm sm:text-base">Budget Exceeded!</AlertTitle>
@@ -657,13 +904,25 @@ export default function BudgetFlowPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           <div className="lg:col-span-2 space-y-3 sm:space-y-4">
             <Card className="shadow-lg">
-              <CardHeader className="p-3 sm:p-4">
+              <CardHeader className="p-2 xs:p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 sm:h-6 text-primary" />
                     <CardTitle><h2 className="font-headline text-base sm:text-lg">Recent Expenses</h2></CardTitle>
                   </div>
-                  {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
+                  <div className="flex items-center gap-2">
+                    {selectedPieCategory && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedPieCategory(null)}
+                        className="h-8 text-xs"
+                      >
+                        <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear "{selectedPieCategory}" Filter
+                      </Button>
+                    )}
+                   {user && <SetThresholdDialog currentThreshold={budgetThreshold} onSetThreshold={handleSetThreshold} currency={selectedCurrency} />}
+                  </div>
                 </div>
                 <div className="flex flex-row items-center gap-2">
                     <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground shrink-0">
@@ -673,7 +932,10 @@ export default function BudgetFlowPage() {
                     <div className="flex flex-row gap-2 w-full">
                       <Select
                           value={selectedMonth.toString()}
-                          onValueChange={(value) => setSelectedMonth(parseInt(value))}
+                          onValueChange={(value) => {
+                            setSelectedMonth(parseInt(value));
+                            setSelectedPieCategory(null); // Clear category filter on month change
+                          }}
                       >
                           <SelectTrigger className="flex-grow basis-auto sm:w-[130px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Month" />
@@ -688,7 +950,10 @@ export default function BudgetFlowPage() {
                       </Select>
                       <Select
                           value={selectedYear.toString()}
-                          onValueChange={(value) => setSelectedYear(parseInt(value))}
+                          onValueChange={(value) => {
+                            setSelectedYear(parseInt(value));
+                            setSelectedPieCategory(null); // Clear category filter on year change
+                          }}
                       >
                           <SelectTrigger className="flex-grow basis-auto sm:w-[100px] h-8 xs:h-9 text-xs sm:text-sm">
                           <SelectValue placeholder="Year" />
@@ -705,26 +970,31 @@ export default function BudgetFlowPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-1.5 xs:p-2 sm:p-3 pt-0">
-                 {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth ? (
+                 {filteredExpenses.length === 0 && !isLoadingData && !isLoadingAuth && !selectedPieCategory ? (
                     <div className="text-center text-muted-foreground py-4 xs:py-6 sm:py-8 min-h-[150px] sm:min-h-[200px] flex flex-col items-center justify-center">
                       <BarChart3 className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4" />
                       <p className="text-xs xs:text-sm sm:text-lg font-semibold">No expenses for this period.</p>
                       <p className="text-[10px] xs:text-xs sm:text-sm">Add expenses or change the date.</p>
                     </div>
                   ) : (
-                    <ExpenseList
-                        expenses={filteredExpenses}
-                        currency={selectedCurrency}
-                        onEditExpense={handleEditExpenseClick}
-                        onDeleteExpense={handleDeleteExpenseClick}
-                    />
+                    <ScrollArea className="h-[240px] sm:h-[280px] md:h-[320px] lg:h-[360px] rounded-md">
+                      <ExpenseList
+                          expenses={filteredExpenses}
+                          currency={selectedCurrency}
+                          onEditExpense={handleEditExpenseClick}
+                          onDeleteExpense={handleDeleteExpenseClick}
+                          selectedPieCategory={selectedPieCategory}
+                          onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
+                          totalFilteredExpenses={totalSpent} 
+                      />
+                    </ScrollArea>
                   )}
               </CardContent>
             </Card>
             
             {user && (
               <Card className="shadow-lg">
-                <CardHeader className="p-3 sm:p-4">
+                <CardHeader className="p-2 xs:p-3 sm:p-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <PiggyBank className="h-5 w-5 sm:h-6 text-primary" />
@@ -761,6 +1031,41 @@ export default function BudgetFlowPage() {
                 </CardContent>
               </Card>
             )}
+            {user && (
+              <Card className="shadow-lg">
+                 <CardHeader className="p-2 xs:p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="h-5 w-5 sm:h-6 text-primary" />
+                      <CardTitle><h2 className="font-headline text-base sm:text-lg">Recurring Expenses</h2></CardTitle>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setRecurringExpenseToEdit(null);
+                        setIsAddRecurringExpenseSheetOpen(true);
+                      }}
+                      className="mt-2 sm:mt-0 h-8 sm:h-9 text-xs sm:text-sm"
+                    >
+                      <PlusCircle className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Add Recurring
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-1.5 xs:p-2 sm:p-3">
+                  <RecurringExpenseList
+                    recurringExpenses={recurringExpenses}
+                    currency={selectedCurrency}
+                    onEditRecurringExpense={handleEditRecurringExpenseClick}
+                    onDeleteRecurringExpense={(re) => handleDeleteRecurringExpenseClick(re)}
+                    onAddRecurringExpenseClick={() => {
+                      setRecurringExpenseToEdit(null);
+                      setIsAddRecurringExpenseSheetOpen(true);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-3 sm:space-y-4">
@@ -772,7 +1077,14 @@ export default function BudgetFlowPage() {
                    </div>
                 </Card>
               ) : (
-                user && <ExpenseChart expenses={filteredExpenses} currency={selectedCurrency} />
+                user && <ExpenseChart expenses={expenses.filter(exp => { // Chart uses all expenses, not just filtered by month/year for category click context
+                      const expenseDate = new Date(exp.date);
+                      return expenseDate.getMonth() === selectedMonth && expenseDate.getFullYear() === selectedYear;
+                    })} 
+                    currency={selectedCurrency}
+                    onCategoryClick={(category) => setSelectedPieCategory(category)}
+                    selectedCategory={selectedPieCategory}
+                  />
               )}
             {user && <SmartTipCard tipData={financialTip} onRefreshTip={fetchNewTip} isLoading={isLoadingTip} />}
           </div>
@@ -823,12 +1135,26 @@ export default function BudgetFlowPage() {
           currency={selectedCurrency}
         />
       )}
+      {user && isAddRecurringExpenseSheetOpen && (
+        <AddRecurringExpenseSheet
+          isOpen={isAddRecurringExpenseSheetOpen}
+          setIsOpen={(isOpen) => {
+            setIsAddRecurringExpenseSheetOpen(isOpen);
+            if(!isOpen) {
+              setRecurringExpenseToEdit(null);
+            }
+          }}
+          onSaveRecurringExpense={handleSaveRecurringExpense}
+          currency={selectedCurrency}
+          recurringExpenseToEdit={recurringExpenseToEdit}
+        />
+      )}
       {user && isDeleteExpenseDialogOpen && (
         <DeleteExpenseDialog
           isOpen={isDeleteExpenseDialogOpen}
           onOpenChange={setIsDeleteExpenseDialogOpen}
           onConfirmDelete={confirmDeleteExpense}
-          itemName="this expense"
+          itemName={expenses.find(e=>e.id === expenseIdToDelete)?.description || "this expense"}
         />
       )}
       {user && isDeleteSavingsGoalDialogOpen && (
@@ -839,7 +1165,16 @@ export default function BudgetFlowPage() {
             goalName={goalNameToDelete}
          />
       )}
+      {user && isDeleteRecurringExpenseDialogOpen && (
+        <DeleteRecurringExpenseDialog
+          isOpen={isDeleteRecurringExpenseDialogOpen}
+          onOpenChange={setIsDeleteRecurringExpenseDialogOpen}
+          onConfirmDelete={confirmDeleteRecurringExpense}
+          itemName={recurringExpenseNameToDelete}
+        />
+      )}
     </div>
   );
 }
 
+    
