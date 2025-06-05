@@ -26,6 +26,7 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
+import { ThemeToggleButton } from './ThemeToggleButton';
 
 const DeleteAccountDialog = dynamic(() => import('./DeleteAccountDialog'), { ssr: false });
 
@@ -141,17 +142,17 @@ export default function AppHeader({
 
   return (
     <>
-      <header className="bg-card border-b shadow-sm">
-        <div className="container mx-auto flex items-center justify-between py-3 px-3 sm:px-4">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
-            <h1 className="text-xl sm:text-2xl font-headline font-bold text-primary">BudgetFlow</h1>
+      <header className="bg-card border-b shadow-sm sticky top-0 z-40">
+        <div className="container mx-auto flex items-center justify-between py-2 sm:py-3 px-2 sm:px-4">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Wallet className="h-6 w-6 sm:h-7 text-primary" />
+            <h1 className="text-lg sm:text-xl font-headline font-bold text-primary">BudgetFlow</h1>
           </div>
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
             {user && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
-                  <SelectTrigger className="w-12 text-sm h-9 md:h-10 px-2">
+                  <SelectTrigger className="w-auto min-w-[40px] sm:min-w-[50px] text-xs sm:text-sm h-8 sm:h-9 px-1.5 sm:px-2">
                     <SelectValue aria-label="Selected currency">
                       {getCurrencySymbol(selectedCurrency)}
                     </SelectValue>
@@ -184,20 +185,22 @@ export default function AppHeader({
                 <Button
                   onClick={onAddExpenseClick}
                   variant="default"
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground h-9 sm:h-10 px-2.5 sm:px-3"
                   aria-label="Add Expense"
                   size="sm"
                 >
-                  <PlusCircle className="h-5 w-5 shrink-0 md:mr-2" />
-                  <span className="hidden md:inline">Add Expense</span>
+                  <PlusCircle className="h-4 w-4 sm:h-5 shrink-0 md:mr-1.5" />
+                  <span className="hidden md:inline text-xs sm:text-sm">Add</span>
                 </Button>
               </>
             )}
+            
+            <ThemeToggleButton />
 
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 sm:h-10 sm:w-10" aria-label="Open user menu">
+                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 sm:h-10 sm:w-10 shrink-0" aria-label="Open user menu">
                     <UserCircle className="h-5 w-5 sm:h-6 sm:w-6" />
                     <span className="sr-only">User menu</span>
                   </Button>
@@ -227,7 +230,7 @@ export default function AppHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-               null
+               null // No user menu if not logged in
             )}
           </div>
         </div>
