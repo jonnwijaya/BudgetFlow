@@ -17,6 +17,7 @@ export interface Expense {
   amount: number;
   created_at: string; 
   updated_at: string; 
+  // recurring_expense_id and is_auto_generated are removed as they relate to recurring expenses
 }
 
 export interface Profile {
