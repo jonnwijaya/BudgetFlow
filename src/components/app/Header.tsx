@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react'; // Added useCallback
+import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -36,8 +36,8 @@ interface HeaderProps {
   user: User | null;
   appMode: 'guest' | 'authenticated' | 'loading';
   onAddExpenseClick: () => void;
-  currentDisplaySpending: number; // This is the potentially filtered amount from totalDisplayedInList
-  overallMonthSpending: number;  // This is the total unfiltered spending for the month
+  currentDisplaySpending: number;
+  overallMonthSpending: number;
   budgetThreshold?: number | null;
   selectedCurrency: CurrencyCode;
   onCurrencyChange: (currencyCode: CurrencyCode) => void;
@@ -61,7 +61,6 @@ export default function AppHeader({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Budget remaining is always calculated based on the overall month's spending
   const budgetRemaining = budgetThreshold != null ? budgetThreshold - overallMonthSpending : null;
 
   const handleLogout = useCallback(async () => {
@@ -155,7 +154,7 @@ export default function AppHeader({
             <Wallet className="h-6 w-6 sm:h-7 text-primary" />
             <Link href="/" className="text-lg sm:text-xl font-headline font-bold text-primary hover:no-underline">BudgetFlow</Link>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
+          <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2">
             {(appMode === 'authenticated' || appMode === 'guest') && (
               <>
                 <Select value={selectedCurrency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
@@ -174,17 +173,15 @@ export default function AppHeader({
                 </Select>
 
                 <div className="text-center">
-                  {/* This shows the current display total, which might be filtered */}
-                  <p className="text-xs text-muted-foreground">Spent</p> 
+                  <p className="text-xs text-muted-foreground hidden md:block">Spent</p> 
                   <p className="text-sm font-semibold">
                     {formatCurrency(currentDisplaySpending, selectedCurrency)}
                   </p>
                 </div>
 
-                {/* Remaining budget is always based on overall month spending */}
                 {budgetThreshold != null && budgetRemaining != null && (
                   <div className="text-center">
-                     <p className="text-xs text-muted-foreground">Rem.</p>
+                     <p className="text-xs text-muted-foreground hidden md:block">Rem.</p>
                     <p className={`text-sm font-semibold ${budgetRemaining < 0 ? 'text-destructive' : ''}`}>
                       {formatCurrency(budgetRemaining, selectedCurrency)}
                     </p>
@@ -240,14 +237,16 @@ export default function AppHeader({
               </DropdownMenu>
             ) : appMode === 'guest' ? (
               <div className="flex items-center gap-1 sm:gap-2">
-                <Button asChild variant="outline" size="sm" className="h-9 text-xs sm:text-sm">
-                  <Link href="/login">
-                    <LogIn className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5"/> Login
+                <Button asChild variant="outline" size="sm" className="h-9 text-xs sm:text-sm px-2 sm:px-3">
+                  <Link href="/login" className="flex items-center gap-1 sm:gap-1.5">
+                    <LogIn className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline">Login</span>
                   </Link>
                 </Button>
-                <Button asChild variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground h-9 text-xs sm:text-sm">
-                  <Link href="/register">
-                   <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5"/> Sign Up
+                <Button asChild variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground h-9 text-xs sm:text-sm px-2 sm:px-3">
+                  <Link href="/register" className="flex items-center gap-1 sm:gap-1.5">
+                   <UserPlus className="h-4 w-4 shrink-0" />
+                   <span className="hidden sm:inline">Sign Up</span>
                   </Link>
                 </Button>
               </div>
