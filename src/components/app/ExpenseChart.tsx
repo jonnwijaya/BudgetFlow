@@ -1,10 +1,10 @@
 
 'use client';
 
-import { type Expense, type CurrencyCode, type ExpenseCategory } from '@/types';
+import React, { useMemo, useCallback } from 'react';
+import type { Expense, CurrencyCode, ExpenseCategory } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { useMemo, useCallback } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import { PieChartIcon } from 'lucide-react';
 
@@ -26,8 +26,7 @@ const COLORS = [
   '#8884d8',
 ];
 
-
-export default function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }: ExpenseChartProps) {
+function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }: ExpenseChartProps) {
   const chartData = useMemo(() => {
     if (!expenses || expenses.length === 0) return [];
 
@@ -37,7 +36,7 @@ export default function ExpenseChart({ expenses, currency, onCategoryClick, sele
     }, {} as Record<string, number>);
 
     return Object.entries(categoryTotals).map(([name, value]) => ({
-      name,
+      name: name as ExpenseCategory,
       value,
     }));
   }, [expenses]);
@@ -111,3 +110,5 @@ export default function ExpenseChart({ expenses, currency, onCategoryClick, sele
     </Card>
   );
 }
+
+export default React.memo(ExpenseChart);
