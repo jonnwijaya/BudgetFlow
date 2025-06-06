@@ -21,7 +21,7 @@ import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
 import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency, generateId } from '@/lib/utils';
+import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 import { format, parse, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay, isValid, isDate } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
@@ -124,6 +124,8 @@ export default function BudgetFlowPage() {
   const [showGuestWarning, setShowGuestWarning] = useState(false);
 
   const { toast } = useToast();
+  
+  const firstLoadDone = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -318,16 +320,15 @@ export default function BudgetFlowPage() {
     }
   }, [appMode, user, totalSpendingForMonth, userProfileSettings.selected_currency, userProfileSettings.budget_threshold]);
 
- useEffect(() => {
-    let isMounted = true;
-    if (appMode === 'authenticated' && user && !isLoadingData && !financialTip) {
+  useEffect(() => {
+    if (appMode === 'authenticated' && user && !isLoadingData && !firstLoadDone.current) {
         fetchNewTip();
+        firstLoadDone.current = true; 
     } else if (appMode === 'guest') {
         setFinancialTip(null);
         setIsLoadingTip(false);
     }
-     return () => { isMounted = false; };
-  }, [appMode, user, isLoadingData, financialTip, fetchNewTip]);
+  }, [appMode, user, isLoadingData, fetchNewTip]);
 
 
   const handleSaveExpense = useCallback(async (expenseData: ExpenseFormData) => {
@@ -542,7 +543,6 @@ export default function BudgetFlowPage() {
         }
 
         const headerLine = lines[0].toLowerCase();
-        // Basic CSV parsing: split by comma, trim whitespace, handle simple quotes
         const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
 
         const dateIdx = headers.indexOf('date');
@@ -571,7 +571,6 @@ export default function BudgetFlowPage() {
             const descriptionStr = values[descriptionIdx];
             const amountStr = values[amountIdx];
             
-            // Attempt to parse date, try common formats
             let parsedDate: Date | null = null;
             const dateFormatsToTry = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd'];
             for (const fmt of dateFormatsToTry) {
@@ -586,7 +585,6 @@ export default function BudgetFlowPage() {
                 console.warn(`Skipping row ${i+1}: Invalid date format "${dateStr}"`);
                 continue;
             }
-
 
             const amount = parseFloat(amountStr);
             if (isNaN(amount) || amount <= 0) {
@@ -623,20 +621,19 @@ export default function BudgetFlowPage() {
                     user_id: user.id,
                     created_at: now,
                     updated_at: now,
-                    date: format(exp.date, 'yyyy-MM-dd'), // Format date for Supabase
+                    date: format(exp.date, 'yyyy-MM-dd'),
                 }));
                 try {
                     const { error: insertError } = await supabase.from('expenses').insert(expensesToSave);
                     if (insertError) throw insertError;
-                    // Refetch all expenses to update the list
                     fetchAuthenticatedUserData(user.id); 
                 } catch (error: any) {
                     toast({ title: "Database Error", description: `Could not save imported expenses: ${error.message}`, variant: "destructive" });
-                    return; // Stop if DB save fails
+                    return; 
                 }
             } else if (appMode === 'guest') {
                 addMultipleLocalExpenses(importedExpenses);
-                setExpenses(getLocalExpenses()); // Refresh from local storage
+                setExpenses(getLocalExpenses()); 
             }
         }
 
@@ -708,6 +705,10 @@ export default function BudgetFlowPage() {
     setGoalToEdit(null);
     setIsAddSavingsGoalSheetOpen(true);
   }, []);
+  
+  const handleClearPieCategoryFilter = useCallback(() => {
+    setSelectedPieCategory(null);
+  }, []);
 
   const handleDismissGuestWarning = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -731,8 +732,8 @@ export default function BudgetFlowPage() {
         user={user}
         appMode={appMode}
         onAddExpenseClick={handleOpenAddExpenseSheet}
-        currentDisplaySpending={totalDisplayedInList} // This is the filtered amount
-        overallMonthSpending={totalSpendingForMonth} // This is the total for budget check
+        currentDisplaySpending={totalDisplayedInList} 
+        overallMonthSpending={totalSpendingForMonth} 
         budgetThreshold={userProfileSettings.budget_threshold}
         selectedCurrency={userProfileSettings.selected_currency}
         onCurrencyChange={handleCurrencyChange}
@@ -802,7 +803,7 @@ export default function BudgetFlowPage() {
                           onEditExpense={handleEditExpenseClick}
                           onDeleteExpense={handleDeleteExpenseClick}
                           selectedPieCategory={selectedPieCategory}
-                          onClearPieCategoryFilter={() => setSelectedPieCategory(null)}
+                          onClearPieCategoryFilter={handleClearPieCategoryFilter}
                           totalFilteredExpenses={totalDisplayedInList}
                       />
                     </ScrollArea>
@@ -878,3 +879,4 @@ export default function BudgetFlowPage() {
     </div>
   );
 }
+

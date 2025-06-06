@@ -1,6 +1,7 @@
 
 'use client';
 
+import React from 'react';
 import type { Expense, CurrencyCode, ExpenseCategory } from '@/types';
 import ExpenseListItem from './ExpenseListItem';
 import { FileText, FilterX } from 'lucide-react';
@@ -17,7 +18,7 @@ interface ExpenseListProps {
   totalFilteredExpenses: number;
 }
 
-export default function ExpenseList({ 
+function ExpenseList({ 
   expenses, 
   currency, 
   onEditExpense, 
@@ -71,3 +72,5 @@ export default function ExpenseList({
     </div>
   );
 }
+
+export default React.memo(ExpenseList);
