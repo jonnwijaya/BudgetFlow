@@ -200,6 +200,7 @@ export default function AddExpenseSheet({
                       selected={field.value}
                       onSelect={field.onChange}
                       disabled={(date) => date > new Date() || date < new Date("1900-01-01") || isSaving}
+                      
                     />
                   </PopoverContent>
                 </Popover>
@@ -208,7 +209,7 @@ export default function AddExpenseSheet({
             {form.formState.errors.date && <p className="text-sm text-destructive">{form.formState.errors.date.message}</p>}
           </div>
 
-          <SheetFooter className="mt-6">
+          <SheetFooter className="mt-6 space-y-2 sm:space-y-0">
             <SheetClose asChild>
               <Button type="button" variant="outline" disabled={isSaving}>Cancel</Button>
             </SheetClose>

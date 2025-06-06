@@ -152,6 +152,7 @@ export default function AddSavingsGoalSheet({
                       selected={field.value || undefined}
                       onSelect={(date) => field.onChange(date || null)}
                       disabled={(date) => date < new Date("1900-01-01") || isSaving}
+                      
                     />
                   </PopoverContent>
                 </Popover>
@@ -160,7 +161,7 @@ export default function AddSavingsGoalSheet({
             {form.formState.errors.target_date && <p className="text-sm text-destructive">{form.formState.errors.target_date.message}</p>}
           </div>
 
-          <SheetFooter className="mt-6">
+          <SheetFooter className="mt-6 space-y-2 sm:space-y-0">
             <SheetClose asChild>
               <Button type="button" variant="outline" disabled={isSaving}>Cancel</Button>
             </SheetClose>

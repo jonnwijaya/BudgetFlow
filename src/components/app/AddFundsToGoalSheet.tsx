@@ -116,7 +116,7 @@ export default function AddFundsToGoalSheet({
             {form.formState.errors.amountToAdd && <p className="text-sm text-destructive">{form.formState.errors.amountToAdd.message}</p>}
           </div>
 
-          <SheetFooter className="mt-6">
+          <SheetFooter className="mt-6 space-y-2 sm:space-y-0">
             <SheetClose asChild>
               <Button type="button" variant="outline" disabled={isSaving}>Cancel</Button>
             </SheetClose>
@@ -130,4 +130,3 @@ export default function AddFundsToGoalSheet({
     </Sheet>
   );
 }
-
