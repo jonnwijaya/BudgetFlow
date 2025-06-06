@@ -37,6 +37,7 @@ export default function RegisterPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -55,7 +56,8 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
-    setShowConfirmationMessage(false); // Reset in case of re-submission attempt
+    setShowConfirmationMessage(false); 
+    setSubmittedEmail('');
     try {
       clearLocalData();
       toast({
@@ -64,7 +66,7 @@ export default function RegisterPage() {
         duration: 3000,
       });
 
-      const emailRedirectTo = `${window.location.origin}/`;
+      const emailRedirectTo = `${window.location.origin}/`; // Redirects to home page after email link confirmed
 
       const { error, data: signUpData } = await supabase.auth.signUp({
         email: data.email,
@@ -76,20 +78,31 @@ export default function RegisterPage() {
 
       if (error) throw error;
 
-      if (signUpData.user && signUpData.user.identities && signUpData.user.identities.length === 0) {
+      if (signUpData.user && !signUpData.session) { // User created, but no session means email confirmation needed
+        setSubmittedEmail(data.email); // Store the email for display
         toast({
             title: 'Confirmation Email Sent!',
-            description: 'Please check your email to confirm your account. You will be redirected to login shortly.',
-            duration: REDIRECT_DELAY, // Match redirect delay
+            description: `Please check your email at ${data.email} to confirm your account. You will be redirected to login shortly.`,
+            duration: REDIRECT_DELAY, 
         });
         setShowConfirmationMessage(true);
         form.reset(); 
-      } else {
+      } else if (signUpData.user && signUpData.session) { // User created and session present (e.g. auto-confirmed)
         toast({
             title: 'Registration Successful!',
-            description: 'Your account has been created. Redirecting...',
+            description: 'Your account has been created and you are now logged in. Redirecting...',
         });
-        // The onAuthStateChange listener in page.tsx should handle redirecting to '/' for auto-confirmed users
+        // The onAuthStateChange listener in login/page.tsx should handle redirecting to '/' 
+        // for auto-confirmed users, as they are now SIGNED_IN.
+      } else {
+        // This case should ideally not be hit if sign-up didn't throw an error.
+        // It implies an unexpected response structure from Supabase.
+        console.error("Unexpected Supabase signUp response:", signUpData);
+        toast({
+          title: 'Registration Incomplete',
+          description: 'Received an unexpected response from the server. Please try again.',
+          variant: 'destructive',
+        });
       }
 
     } catch (error: any) {
@@ -122,7 +135,7 @@ export default function RegisterPage() {
               </div>
               <CardTitle className="text-3xl font-headline">Check Your Email!</CardTitle>
               <CardDescription>
-                We've sent a confirmation link to <span className="font-semibold text-primary">{form.getValues('email')}</span>.
+                We've sent a confirmation link to <span className="font-semibold text-primary">{submittedEmail}</span>.
                 Please click the link in the email to activate your account.
               </CardDescription>
             </>
