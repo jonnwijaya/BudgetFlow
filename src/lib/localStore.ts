@@ -1,8 +1,9 @@
 
 'use client';
 
-import type { Expense, SavingsGoal, UserProfileSettings, CurrencyCode } from '@/types';
-import { parseISO, isValid } from 'date-fns';
+import type { Expense, SavingsGoal, UserProfileSettings, CurrencyCode, ExpenseCategory } from '@/types';
+import { EXPENSE_CATEGORIES } from '@/types';
+import { parse, parseISO, isValid, isDate } from 'date-fns';
 
 const GUEST_USER_ID = 'guest-user';
 const PROFILE_SETTINGS_KEY = 'budgetflow_profileSettings';
@@ -34,7 +35,7 @@ function deserializeExpenses(expenses: Expense[]): Expense[] {
   return expenses.map(exp => ({
     ...exp,
     date: typeof exp.date === 'string' ? parseISO(exp.date) : exp.date,
-  })).filter(exp => isValid(exp.date));
+  })).filter(exp => exp.date && (isDate(exp.date) && isValid(exp.date)));
 }
 
 export function getLocalExpenses(): Expense[] {
@@ -63,6 +64,25 @@ export function addLocalExpense(newExpenseData: Omit<Expense, 'id' | 'user_id' |
   return newExpense;
 }
 
+export function addMultipleLocalExpenses(newExpensesData: Array<Omit<Expense, 'id' | 'user_id' | 'created_at' | 'updated_at'>>): Expense[] {
+  if (typeof window === 'undefined') return [];
+  const existingExpenses = getLocalExpenses();
+  const now = new Date().toISOString();
+  
+  const newCompleteExpenses: Expense[] = newExpensesData.map(expData => ({
+    ...expData,
+    id: generateId(),
+    user_id: GUEST_USER_ID,
+    created_at: now,
+    updated_at: now,
+  }));
+
+  const updatedExpenses = [...newCompleteExpenses, ...existingExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  saveLocalExpenses(updatedExpenses);
+  return newCompleteExpenses; // Return only the newly added ones, consistent with single add
+}
+
+
 export function updateLocalExpense(updatedExpenseData: Expense): Expense | null {
   let expenses = getLocalExpenses();
   const index = expenses.findIndex(exp => exp.id === updatedExpenseData.id);
@@ -85,8 +105,7 @@ function deserializeSavingsGoals(goals: SavingsGoal[]): SavingsGoal[] {
     return goals.map(goal => ({
       ...goal,
       target_date: goal.target_date && typeof goal.target_date === 'string' ? parseISO(goal.target_date) : goal.target_date,
-      // Ensure date fields are valid, otherwise nullify them or handle error
-    })).filter(goal => goal.target_date === null || isValid(goal.target_date));
+    })).filter(goal => goal.target_date === null || (goal.target_date && isDate(goal.target_date) && isValid(goal.target_date)));
 }
 
 export function getLocalSavingsGoals(): SavingsGoal[] {
@@ -137,5 +156,4 @@ export function clearLocalData(): void {
   localStorage.removeItem(PROFILE_SETTINGS_KEY);
   localStorage.removeItem(EXPENSES_KEY);
   localStorage.removeItem(SAVINGS_GOALS_KEY);
-  // Potentially add more keys here if other local data is stored
 }

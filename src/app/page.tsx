@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -16,13 +16,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle, FilterX, Info } from 'lucide-react';
 import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal, UserProfileSettings } from '@/types';
-import { SUPPORTED_CURRENCIES } from '@/types';
+import { SUPPORTED_CURRENCIES, EXPENSE_CATEGORIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
 import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
-import { format, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay } from 'date-fns';
+import { formatCurrency, generateId } from '@/lib/utils';
+import { format, parse, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay, isValid, isDate } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
 import { checkAndAwardUnderBudgetMonth, checkAndAwardLoginStreak } from '@/lib/achievementsHelper';
@@ -30,7 +30,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import {
   getLocalProfileSettings, saveLocalProfileSettings,
-  getLocalExpenses, addLocalExpense, updateLocalExpense, deleteLocalExpense,
+  getLocalExpenses, addLocalExpense, updateLocalExpense, deleteLocalExpense, addMultipleLocalExpenses,
   getLocalSavingsGoals, addLocalSavingsGoal, updateLocalSavingsGoal, deleteLocalSavingsGoal
 } from '@/lib/localStore';
 import { initializeLocalDataIfNotExists } from '@/lib/sampleData';
@@ -100,7 +100,7 @@ export default function BudgetFlowPage() {
   const [goalToAddTo, setGoalToAddTo] = useState<SavingsGoal | null>(null);
 
   const [financialTip, setFinancialTip] = useState<FinancialTip | null>(null);
-  const [isLoadingTip, setIsLoadingTip] = useState(false); // Initial fetch handled by effect
+  const [isLoadingTip, setIsLoadingTip] = useState(false);
 
   const [userProfileSettings, setUserProfileSettings] = useState<UserProfileSettings>({
     budget_threshold: null,
@@ -318,17 +318,15 @@ export default function BudgetFlowPage() {
     }
   }, [appMode, user, totalSpendingForMonth, userProfileSettings.selected_currency, userProfileSettings.budget_threshold]);
 
-  useEffect(() => {
+ useEffect(() => {
     let isMounted = true;
-    // Fetch tip only once when component mounts and user data is available, not on every data change.
-    // Manual refresh is handled by the button on SmartTipCard.
-    if (appMode === 'authenticated' && user && !isLoadingData && !financialTip) { // Add !financialTip to fetch only if no tip exists
+    if (appMode === 'authenticated' && user && !isLoadingData && !financialTip) {
         fetchNewTip();
     } else if (appMode === 'guest') {
         setFinancialTip(null);
         setIsLoadingTip(false);
     }
-    return () => { isMounted = false; };
+     return () => { isMounted = false; };
   }, [appMode, user, isLoadingData, financialTip, fetchNewTip]);
 
 
@@ -359,7 +357,7 @@ export default function BudgetFlowPage() {
       } catch (error: any) {
         toast({ title: "Save Error", description: error.message, variant: "destructive" });
       } finally {
-        setExpenseToEdit(null); // Clear edit state after operation
+        setExpenseToEdit(null); 
       }
     } else if (appMode === 'guest') {
         if (expenseToEdit) {
@@ -378,7 +376,7 @@ export default function BudgetFlowPage() {
             setExpenses(getLocalExpenses());
             toast({ title: "Expense Added (Local)" });
         }
-        setExpenseToEdit(null); // Clear edit state
+        setExpenseToEdit(null); 
     }
   }, [appMode, user, toast, expenseToEdit]);
 
@@ -528,6 +526,139 @@ export default function BudgetFlowPage() {
     toast({ title: "Export Successful" });
   }, [filteredExpensesToList, selectedMonth, selectedYear, selectedPieCategory, toast]);
 
+  const handleImportCSV = useCallback(async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        const csvText = event.target?.result as string;
+        if (!csvText) {
+            toast({ title: "Import Error", description: "Could not read file.", variant: "destructive" });
+            return;
+        }
+
+        const lines = csvText.split(/\r\n|\n/).filter(line => line.trim() !== '');
+        if (lines.length < 2) {
+            toast({ title: "Import Error", description: "CSV file must contain a header row and at least one data row.", variant: "destructive" });
+            return;
+        }
+
+        const headerLine = lines[0].toLowerCase();
+        // Basic CSV parsing: split by comma, trim whitespace, handle simple quotes
+        const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+
+        const dateIdx = headers.indexOf('date');
+        const categoryIdx = headers.indexOf('category');
+        const descriptionIdx = headers.indexOf('description');
+        const amountIdx = headers.indexOf('amount');
+
+        if (dateIdx === -1 || categoryIdx === -1 || descriptionIdx === -1 || amountIdx === -1) {
+            toast({ title: "Import Error", description: "CSV header must contain: Date, Category, Description, Amount.", variant: "destructive" });
+            return;
+        }
+
+        const importedExpenses: Array<Omit<Expense, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = [];
+        let failedRowCount = 0;
+        const now = new Date().toISOString();
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+            if (values.length < Math.max(dateIdx, categoryIdx, descriptionIdx, amountIdx) + 1) {
+                failedRowCount++;
+                continue;
+            }
+
+            const dateStr = values[dateIdx];
+            const categoryStr = values[categoryIdx];
+            const descriptionStr = values[descriptionIdx];
+            const amountStr = values[amountIdx];
+            
+            // Attempt to parse date, try common formats
+            let parsedDate: Date | null = null;
+            const dateFormatsToTry = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd'];
+            for (const fmt of dateFormatsToTry) {
+                const dt = parse(dateStr, fmt, new Date());
+                if (isValid(dt)) {
+                    parsedDate = dt;
+                    break;
+                }
+            }
+             if (!parsedDate) {
+                failedRowCount++;
+                console.warn(`Skipping row ${i+1}: Invalid date format "${dateStr}"`);
+                continue;
+            }
+
+
+            const amount = parseFloat(amountStr);
+            if (isNaN(amount) || amount <= 0) {
+                failedRowCount++;
+                console.warn(`Skipping row ${i+1}: Invalid amount "${amountStr}"`);
+                continue;
+            }
+
+            if (!descriptionStr) {
+                failedRowCount++;
+                console.warn(`Skipping row ${i+1}: Missing description`);
+                continue;
+            }
+            
+            const category = EXPENSE_CATEGORIES.find(cat => cat.toLowerCase() === categoryStr.toLowerCase()) as ExpenseCategory | undefined;
+            if (!category) {
+                failedRowCount++;
+                 console.warn(`Skipping row ${i+1}: Invalid category "${categoryStr}"`);
+                continue;
+            }
+
+            importedExpenses.push({
+                date: parsedDate,
+                category,
+                description: descriptionStr,
+                amount,
+            });
+        }
+
+        if (importedExpenses.length > 0) {
+            if (appMode === 'authenticated' && user) {
+                const expensesToSave = importedExpenses.map(exp => ({
+                    ...exp,
+                    user_id: user.id,
+                    created_at: now,
+                    updated_at: now,
+                    date: format(exp.date, 'yyyy-MM-dd'), // Format date for Supabase
+                }));
+                try {
+                    const { error: insertError } = await supabase.from('expenses').insert(expensesToSave);
+                    if (insertError) throw insertError;
+                    // Refetch all expenses to update the list
+                    fetchAuthenticatedUserData(user.id); 
+                } catch (error: any) {
+                    toast({ title: "Database Error", description: `Could not save imported expenses: ${error.message}`, variant: "destructive" });
+                    return; // Stop if DB save fails
+                }
+            } else if (appMode === 'guest') {
+                addMultipleLocalExpenses(importedExpenses);
+                setExpenses(getLocalExpenses()); // Refresh from local storage
+            }
+        }
+
+        let toastMessage = "";
+        if (importedExpenses.length > 0) {
+            toastMessage += `${importedExpenses.length} expenses imported successfully. `;
+        }
+        if (failedRowCount > 0) {
+            toastMessage += `${failedRowCount} rows failed to import.`;
+        }
+        if (!toastMessage) {
+            toastMessage = "No valid expenses found to import.";
+        }
+        toast({ title: "Import Complete", description: toastMessage, duration: 5000 });
+    };
+    reader.onerror = () => {
+        toast({ title: "Import Error", description: "Failed to read the file.", variant: "destructive"});
+    };
+    reader.readAsText(file);
+  }, [appMode, user, toast, fetchAuthenticatedUserData]);
+
+
   const handleSetThreshold = useCallback(async (newThreshold: number | null) => {
     if (appMode === 'authenticated' && user) {
       try {
@@ -600,8 +731,8 @@ export default function BudgetFlowPage() {
         user={user}
         appMode={appMode}
         onAddExpenseClick={handleOpenAddExpenseSheet}
-        currentDisplaySpending={totalDisplayedInList}
-        overallMonthSpending={totalSpendingForMonth}
+        currentDisplaySpending={totalDisplayedInList} // This is the filtered amount
+        overallMonthSpending={totalSpendingForMonth} // This is the total for budget check
         budgetThreshold={userProfileSettings.budget_threshold}
         selectedCurrency={userProfileSettings.selected_currency}
         onCurrencyChange={handleCurrencyChange}
@@ -723,7 +854,7 @@ export default function BudgetFlowPage() {
         </div>
       </main>
 
-      <AppFooter onExportClick={handleExportSummary} />
+      <AppFooter onExportClick={handleExportSummary} onImportClick={handleImportCSV} />
 
       {(appMode === 'authenticated' || appMode === 'guest') && isAddExpenseSheetOpen && (
         <AddExpenseSheet isOpen={isAddExpenseSheetOpen} setIsOpen={(isOpen) => { setIsAddExpenseSheetOpen(isOpen); if (!isOpen) setExpenseToEdit(null); }}
