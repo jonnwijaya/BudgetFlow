@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-// ScrollArea is removed from here as DialogContent will handle overall scroll
 import { EXPENSE_CATEGORIES } from '@/types';
 
 interface ImportInfoDialogProps {
@@ -25,24 +24,15 @@ export default function ImportInfoDialog({ isOpen, onOpenChange }: ImportInfoDia
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      {/*
-        DialogContent will now handle its own scrolling if its content is too tall.
-        max-h-[85vh] ensures it doesn't take up the entire screen, leaving some context.
-        overflow-y-auto allows it to scroll.
-      */}
-      <DialogContent className="w-[90vw] max-w-2xl overflow-y-auto max-h-[85vh]">
-        <DialogHeader>
+      <DialogContent className="flex flex-col w-[90vw] max-w-2xl max-h-[85vh] p-0">
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>CSV Import Instructions</DialogTitle>
           <DialogDescription>
             Follow these guidelines to successfully import your expenses via CSV.
           </DialogDescription>
         </DialogHeader>
 
-        {/*
-          The main content area. No separate ScrollArea needed here if DialogContent scrolls.
-          The div still helps with spacing.
-        */}
-        <div className="py-4 space-y-4 text-sm">
+        <div className="flex-grow overflow-y-auto px-6 py-4 space-y-4 text-sm">
           <p>
             Your CSV file <strong className="text-primary">must include a header row</strong> with the following column names (case-insensitive):
           </p>
@@ -71,7 +61,6 @@ export default function ImportInfoDialog({ isOpen, onOpenChange }: ImportInfoDia
           </ul>
 
           <h3 className="font-semibold text-md mt-3 text-primary">Example CSV Content:</h3>
-          {/* Table wrapper needs overflow-x-auto for horizontal scrolling if table is wide */}
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
@@ -108,7 +97,7 @@ export default function ImportInfoDialog({ isOpen, onOpenChange }: ImportInfoDia
             Rows with invalid data (e.g., incorrect category, invalid date format, non-positive amount) will be skipped during import.
           </p>
         </div>
-        <DialogFooter className="pt-4"> {/* This footer will now scroll with the content if DialogContent overflows */}
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <DialogClose asChild>
             <Button type="button" variant="outline">Close</Button>
           </DialogClose>
