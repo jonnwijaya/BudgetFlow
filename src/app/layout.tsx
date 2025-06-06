@@ -19,13 +19,16 @@ export const metadata: Metadata = {
   title: 'BudgetFlow - Smart Expense Tracking & Financial Insights',
   description: 'Effortlessly manage your personal finances with BudgetFlow. Track expenses, set budgets, get AI-powered financial tips, and gain insights into your spending habits. Take control of your money today!',
   keywords: 'budgeting, expense tracker, personal finance, money management, financial planning, savings, AI finance, smart budget, budget app',
+  manifest: '/manifest.json', 
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#F0F4F7' },
-    { media: '(prefers-color-scheme: dark)', color: '#26292B' },
+    { media: '(prefers-color-scheme: light)', color: '#F0F4F7' }, 
+    { media: '(prefers-color-scheme: dark)', color: '#26292B' },  
   ],
+  initialScale: 1,
+  width: 'device-width',
 };
 
 export default function RootLayout({
@@ -36,7 +39,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={ptSans.variable}>
       <head>
-        {/* Viewport meta tags like width=device-width, initial-scale=1 are automatically handled by Next.js */}
+        <link rel="icon" href="/icons/budgetflow-logo.png" type="image/png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="BudgetFlow" />
+        <link rel="apple-touch-icon" href="/icons/budgetflow-logo.png" />
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
         <ThemeProvider
