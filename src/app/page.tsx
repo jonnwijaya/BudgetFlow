@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle, FilterX, Info } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarDays, Loader2, PiggyBank, PlusCircle, FilterX, Info, TrendingUp } from 'lucide-react';
 import type { Expense, FinancialTip, CurrencyCode, Profile, ExpenseCategory, SavingsGoal, UserProfileSettings } from '@/types';
 import { SUPPORTED_CURRENCIES, EXPENSE_CATEGORIES } from '@/types';
 import type { ExpenseFormData } from '@/components/app/AddExpenseSheet';
@@ -22,7 +22,7 @@ import type { SavingsGoalFormData } from '@/components/app/AddSavingsGoalSheet';
 import { generateFinancialTip } from '@/ai/flows/generate-financial-tip';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
-import { format, parse, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay, isValid, isDate } from 'date-fns';
+import { format, parse, parseISO, startOfMonth, endOfMonth, isBefore, isSameDay, startOfDay, isValid, isDate, getDaysInMonth, getDate } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import type { User, Subscription } from '@supabase/supabase-js';
 import { checkAndAwardUnderBudgetMonth, checkAndAwardLoginStreak } from '@/lib/achievementsHelper';
@@ -717,6 +717,48 @@ export default function BudgetFlowPage() {
     setShowGuestWarning(false);
   }, []);
 
+  const monthlyProjection = useMemo(() => {
+    const today = new Date();
+    const isCurrentMonthView = selectedMonth === today.getMonth() && selectedYear === today.getFullYear();
+
+    if (!isCurrentMonthView || !userProfileSettings.budget_threshold || today.getDate() < 7) {
+        return { show: false, projectedSpending: 0, overspendAmount: 0, spentSoFar: 0, currentDay: 0 };
+    }
+
+    const _currentDayOfMonth = getDate(today);
+    const daysInCurrentMonth = getDaysInMonth(today);
+
+    const _spentSoFarThisMonth = expenses
+        .filter(exp => {
+            const expenseDate = new Date(exp.date);
+            return expenseDate.getFullYear() === selectedYear &&
+                   expenseDate.getMonth() === selectedMonth &&
+                   getDate(expenseDate) <= _currentDayOfMonth;
+        })
+        .reduce((sum, exp) => sum + exp.amount, 0);
+    
+    if (_currentDayOfMonth === 0 || _spentSoFarThisMonth === 0) {
+        return { show: false, projectedSpending: 0, overspendAmount: 0, spentSoFar: 0, currentDay: 0 };
+    }
+
+    const averageDailySpending = _spentSoFarThisMonth / _currentDayOfMonth;
+    const _projectedMonthlySpending = averageDailySpending * daysInCurrentMonth;
+    
+    if (userProfileSettings.budget_threshold === null) { // Should be caught by earlier check, but good for safety
+       return { show: false, projectedSpending: 0, overspendAmount: 0, spentSoFar: 0, currentDay: 0 };
+    }
+    const _projectedOverspendAmount = _projectedMonthlySpending - userProfileSettings.budget_threshold;
+
+    return {
+        show: _projectedOverspendAmount > 0,
+        projectedSpending: _projectedMonthlySpending,
+        overspendAmount: _projectedOverspendAmount,
+        spentSoFar: _spentSoFarThisMonth,
+        currentDay: _currentDayOfMonth,
+    };
+  }, [expenses, selectedMonth, selectedYear, userProfileSettings.budget_threshold]);
+
+
   if (appMode === 'loading' || isLoadingData) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -759,6 +801,18 @@ export default function BudgetFlowPage() {
             <AlertTitle className="text-sm sm:text-base">Budget Exceeded!</AlertTitle>
             <AlertDescription className="text-xs sm:text-sm">
               You have spent {formatCurrency(totalSpendingForMonth, userProfileSettings.selected_currency)} for {format(new Date(selectedYear, selectedMonth), 'MMMM yyyy')}, which is over your budget of {userProfileSettings.budget_threshold ? formatCurrency(userProfileSettings.budget_threshold, userProfileSettings.selected_currency) : 'N/A'}.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {monthlyProjection.show && userProfileSettings.budget_threshold && (
+           <Alert variant="default" className="shadow-md border-yellow-500/50 bg-yellow-50/80 dark:bg-yellow-900/30">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+            <AlertTitle className="text-sm sm:text-base text-yellow-700 dark:text-yellow-300">Spending Projection Alert</AlertTitle>
+            <AlertDescription className="text-xs sm:text-sm text-yellow-600 dark:text-yellow-200">
+              Based on spending {formatCurrency(monthlyProjection.spentSoFar, userProfileSettings.selected_currency)} by day {monthlyProjection.currentDay} of this month, 
+              you're projected to spend approximately {formatCurrency(monthlyProjection.projectedSpending, userProfileSettings.selected_currency)}.
+              This is about {formatCurrency(monthlyProjection.overspendAmount, userProfileSettings.selected_currency)} over your budget of {formatCurrency(userProfileSettings.budget_threshold, userProfileSettings.selected_currency)}.
             </AlertDescription>
           </Alert>
         )}
