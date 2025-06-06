@@ -21,6 +21,7 @@ const MIN_PASSWORD_LENGTH = 8;
 const updatePasswordSchema = z.object({
   password: z.string()
     .min(MIN_PASSWORD_LENGTH, { message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.` })
+    .regex(/(?=.*[a-z])/, { message: 'Password must contain at least one lowercase letter.' })
     .regex(/(?=.*[A-Z])/, { message: 'Password must contain at least one uppercase letter.' })
     .regex(/(?=.*\d)/, { message: 'Password must contain at least one number.' })
     .regex(/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`])/, { message: 'Password must contain at least one symbol.' }),
@@ -226,6 +227,7 @@ export default function UpdatePasswordPage() {
                 />
                  <ul className="mt-2 list-disc list-inside text-xs text-muted-foreground space-y-1">
                       <li>Minimum {MIN_PASSWORD_LENGTH} characters</li>
+                      <li>At least one lowercase letter (a-z)</li>
                       <li>At least one uppercase letter (A-Z)</li>
                       <li>At least one number (0-9)</li>
                       <li>At least one symbol (e.g., !@#$%)</li>
