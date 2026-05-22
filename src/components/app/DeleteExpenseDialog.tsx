@@ -33,7 +33,7 @@ export default function DeleteExpenseDialog({
           <AlertDialogTitle className="text-base">Delete Expense?</AlertDialogTitle>
           <AlertDialogDescription className="text-xs">
             This will permanently delete "{itemName}". This action cannot be undone.
-          </AlertDescription>
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="gap-2">
           <AlertDialogCancel asChild>
