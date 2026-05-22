@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,35 +7,28 @@ import { Button } from '@/components/ui/button';
 
 export function ThemeToggleButton() {
   const [mounted, setMounted] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   if (!mounted) {
-    // Render a placeholder or null on the server to avoid hydration mismatch
-    // and layout shift. Size matches Button size="icon".
-    return <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0" />;
+    return <div className="h-9 w-9 shrink-0" />;
   }
 
-  const toggleTheme = () => {
-    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
-  };
+  const isDark = resolvedTheme === 'dark';
 
   return (
     <Button
       variant="ghost"
       size="icon"
-      onClick={toggleTheme}
-      aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="rounded-full h-9 w-9 sm:h-10 sm:w-10 shrink-0"
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="h-9 w-9 rounded-lg shrink-0"
     >
-      {resolvedTheme === 'dark' ? (
-        <Sun className="h-5 w-5 sm:h-6 sm:w-6" />
-      ) : (
-        <Moon className="h-5 w-5 sm:h-6 sm:w-6" />
-      )}
+      <Sun className={`h-4 w-4 transition-all ${isDark ? 'rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
+      <Moon className={`absolute h-4 w-4 transition-all ${isDark ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`} />
     </Button>
   );
 }

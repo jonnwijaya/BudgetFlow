@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import type { Expense, CurrencyCode, ExpenseCategory } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
@@ -27,9 +26,24 @@ const COLORS = [
 ];
 
 function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }: ExpenseChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(300);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const chartData = useMemo(() => {
     if (!expenses || expenses.length === 0) return [];
-
     const categoryTotals = expenses.reduce((acc, expense) => {
       acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
       return acc;
@@ -48,37 +62,37 @@ function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }:
     }
   }, [onCategoryClick, selectedCategory]);
 
+  const outerRadius = Math.max(60, Math.min(containerWidth * 0.32, 110));
+  const innerRadius = Math.max(30, Math.min(containerWidth * 0.16, 55));
+
   if (expenses.length === 0) {
     return (
-      <Card className="shadow-lg">
-        <CardHeader className="p-3 sm:p-4">
-          <CardTitle className="font-headline text-base sm:text-xl"><h2>Expense Breakdown</h2></CardTitle>
-          <CardDescription className="text-xs sm:text-sm">No data for the selected period.</CardDescription>
-        </CardHeader>
-        <CardContent className="h-[200px] xs:h-[230px] sm:h-[288px] flex flex-col items-center justify-center text-muted-foreground p-3 sm:p-4">
-          <PieChartIcon className="h-8 w-8 xs:h-10 xs:w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 xs:mb-3 sm:mb-4" />
-          <p className="text-xs xs:text-sm text-center">Add expenses or select a different period.</p>
+      <Card className="border shadow-sm">
+        <CardContent className="h-[280px] flex flex-col items-center justify-center text-muted-foreground">
+          <PieChartIcon className="h-10 w-10 text-muted-foreground/40 mb-3" />
+          <p className="text-sm font-medium">No data available.</p>
+          <p className="text-xs mt-1">Add expenses to see your breakdown.</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="shadow-lg">
-      <CardHeader className="p-3 sm:p-4">
-        <CardTitle className="font-headline text-base sm:text-xl"><h2>Expense Breakdown</h2></CardTitle>
-        <CardDescription className="text-xs sm:text-sm">Spending distribution by category. Click a slice to filter.</CardDescription>
+    <Card className="border shadow-sm">
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-sm font-semibold">Breakdown</CardTitle>
+        <CardDescription className="text-xs">Click a slice to filter expenses.</CardDescription>
       </CardHeader>
-      <CardContent className="p-1 xs:p-2 sm:p-3">
-        <ResponsiveContainer width="100%" height={200} className="xs:!h-[230px] sm:!h-[288px]">
+      <CardContent className="p-2 pt-0" ref={containerRef}>
+        <ResponsiveContainer width="100%" height={260}>
           <RechartsPieChart>
             <Pie
               data={chartData}
               cx="50%"
               cy="50%"
               labelLine={false}
-              outerRadius={window.innerWidth < 400 ? 50 : (window.innerWidth < 640 ? 60 : 80)}
-              innerRadius={window.innerWidth < 400 ? 25 : (window.innerWidth < 640 ? 30 : 40)}
+              outerRadius={outerRadius}
+              innerRadius={innerRadius}
               fill="#8884d8"
               dataKey="value"
               nameKey="name"
@@ -86,10 +100,10 @@ function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }:
               aria-label="Expense distribution pie chart"
             >
               {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={COLORS[index % COLORS.length]} 
-                  stroke={COLORS[index % COLORS.length]} 
+                <Cell
+                  key={`cell-${index}`}
+                  fill={COLORS[index % COLORS.length]}
+                  stroke={COLORS[index % COLORS.length]}
                   className={selectedCategory === entry.name ? "opacity-100" : (selectedCategory ? "opacity-50" : "opacity-100") + " cursor-pointer focus:outline-none"}
                   tabIndex={0}
                   aria-label={`Category ${entry.name}, amount ${formatCurrency(entry.value, currency)}`}
@@ -98,7 +112,7 @@ function ExpenseChart({ expenses, currency, onCategoryClick, selectedCategory }:
             </Pie>
             <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
             <Legend
-              wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }}
+              wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
               iconSize={8}
               layout="horizontal"
               verticalAlign="bottom"

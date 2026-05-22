@@ -3,7 +3,7 @@
 
 import type { Expense, SavingsGoal, UserProfileSettings, CurrencyCode, ExpenseCategory } from '@/types';
 import { EXPENSE_CATEGORIES } from '@/types';
-import { parse, parseISO, isValid, isDate } from 'date-fns';
+import { parseISO, isValid, isDate } from 'date-fns';
 
 const GUEST_USER_ID = 'guest-user';
 const PROFILE_SETTINGS_KEY = 'budgetflow_profileSettings';

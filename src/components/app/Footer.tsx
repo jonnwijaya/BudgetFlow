@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useRef, useState } from 'react';
@@ -10,7 +9,7 @@ const ImportInfoDialog = dynamic(() => import('./ImportInfoDialog'), { ssr: fals
 
 interface FooterProps {
   onExportClick: () => void;
-  onImportClick: (file: File) => void; 
+  onImportClick: (file: File) => void;
 }
 
 export default function AppFooter({ onExportClick, onImportClick }: FooterProps) {
@@ -33,46 +32,43 @@ export default function AppFooter({ onExportClick, onImportClick }: FooterProps)
 
   return (
     <>
-      <footer className="bg-card border-t mt-auto p-3 sm:p-4">
-        <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Button onClick={onExportClick} variant="outline" size="sm" className="w-full sm:w-auto">
-              <Download className="mr-2 h-4 w-4" />
-              Export Summary
-              <span className="hidden md:inline ml-1">(CSV)</span>
-            </Button>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button onClick={handleImportButtonClick} variant="outline" size="sm" className="flex-grow sm:flex-grow-0">
-                <Upload className="mr-2 h-4 w-4" />
-                Import Expenses
-                <span className="hidden md:inline ml-1">(CSV)</span>
+      <footer className="border-t bg-card mt-auto safe-area-inset-bottom">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button onClick={onExportClick} variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
               </Button>
-              <Button 
-                onClick={() => setIsInfoDialogOpen(true)} 
-                variant="outline" 
-                size="icon" 
-                className="h-9 w-9 sm:h-9 sm:w-9 shrink-0" 
+              <Button onClick={handleImportButtonClick} variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
+                <Upload className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Import</span>
+              </Button>
+              <Button
+                onClick={() => setIsInfoDialogOpen(true)}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
                 aria-label="Import CSV Information"
               >
                 <Info className="h-4 w-4" />
               </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".csv"
+                className="hidden"
+                aria-hidden="true"
+              />
             </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".csv"
-              className="hidden"
-              aria-hidden="true"
-            />
+            <p className="text-[10px] text-muted-foreground">
+              BudgetFlow &copy; {new Date().getFullYear()}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground text-center sm:text-right mt-2 sm:mt-0">
-            BudgetFlow &copy; {new Date().getFullYear()}. For informational purposes only.
-          </p>
         </div>
       </footer>
       {isInfoDialogOpen && <ImportInfoDialog isOpen={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen} />}
     </>
   );
 }
-

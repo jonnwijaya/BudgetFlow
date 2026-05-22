@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -19,20 +18,19 @@ interface SavingsGoalListProps {
 function SavingsGoalList({ goals, currency, onEditGoal, onDeleteGoal, onAddGoalClick, onAddFundsToGoal }: SavingsGoalListProps) {
   if (goals.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-6 sm:py-8 flex flex-col items-center justify-center border-2 border-dashed rounded-lg min-h-[150px] sm:min-h-[200px]">
-        <PiggyBank className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
-        <p className="text-sm sm:text-lg font-semibold">No savings goals yet.</p>
-        <p className="text-xs sm:text-sm mb-3 sm:mb-4">Start planning for your future!</p>
-        <Button onClick={onAddGoalClick} size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-          <PlusCircle className="mr-1.5 h-4 w-4" />
-          Add First Goal
+      <div className="text-center text-muted-foreground py-10 flex flex-col items-center justify-center min-h-[180px]">
+        <PiggyBank className="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p className="text-sm font-medium">No savings goals yet.</p>
+        <p className="text-xs mt-1 mb-4">Start planning for your future.</p>
+        <Button onClick={onAddGoalClick} size="sm" className="h-8 text-xs bg-primary hover:bg-primary/90">
+          <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add First Goal
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-1.5 sm:space-y-2">
+    <div>
       {goals.map(goal => (
         <SavingsGoalItem
           key={goal.id}

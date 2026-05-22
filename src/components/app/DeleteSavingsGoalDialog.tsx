@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -18,7 +17,7 @@ interface DeleteSavingsGoalDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onConfirmDelete: () => void;
-  goalName?: string; 
+  goalName?: string;
 }
 
 export default function DeleteSavingsGoalDialog({
@@ -29,25 +28,21 @@ export default function DeleteSavingsGoalDialog({
 }: DeleteSavingsGoalDialogProps) {
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="rounded-xl max-w-sm">
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the savings goal: "{goalName}".
+          <AlertDialogTitle className="text-base">Delete Goal?</AlertDialogTitle>
+          <AlertDialogDescription className="text-xs">
+            This will permanently delete "{goalName}" and its progress. This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter className="gap-2">
           <AlertDialogCancel asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline" className="h-10 flex-1">Cancel</Button>
           </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirmDelete}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            asChild
-          >
+          <AlertDialogAction onClick={onConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 flex-1" asChild>
             <Button>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Yes, Delete Goal
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

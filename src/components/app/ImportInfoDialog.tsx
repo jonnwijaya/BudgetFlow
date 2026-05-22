@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -24,82 +23,63 @@ export default function ImportInfoDialog({ isOpen, onOpenChange }: ImportInfoDia
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col w-[90vw] max-w-2xl max-h-[85vh] p-0">
-        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
-          <DialogTitle>CSV Import Instructions</DialogTitle>
-          <DialogDescription>
-            Follow these guidelines to successfully import your expenses via CSV.
+      <DialogContent className="flex flex-col w-[92vw] max-w-lg max-h-[85dvh] p-0 rounded-xl">
+        <DialogHeader className="p-5 pb-3 border-b flex-shrink-0">
+          <DialogTitle className="text-base">CSV Import Instructions</DialogTitle>
+          <DialogDescription className="text-xs">
+            Follow these guidelines to successfully import your expenses.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-grow overflow-y-auto px-6 py-4 space-y-4 text-sm">
+        <div className="flex-grow overflow-y-auto px-5 py-4 space-y-4 text-sm">
           <p>
-            Your CSV file <strong className="text-primary">must include a header row</strong> with the following column names (case-insensitive):
+            Your CSV file <strong className="text-primary">must include a header row</strong> with the following columns:
           </p>
-          <ul className="list-disc list-inside pl-4 space-y-1">
-            <li><code className="bg-muted px-1 py-0.5 rounded">Date</code>: The date of the expense.</li>
-            <li><code className="bg-muted px-1 py-0.5 rounded">Category</code>: The expense category.</li>
-            <li><code className="bg-muted px-1 py-0.5 rounded">Description</code>: A brief description of the expense.</li>
-            <li><code className="bg-muted px-1 py-0.5 rounded">Amount</code>: The monetary value of the expense (must be a positive number).</li>
-          </ul>
-          <p>An optional <code className="bg-muted px-1 py-0.5 rounded">ID</code> column will be ignored if present.</p>
-
-          <h3 className="font-semibold text-md mt-3 text-primary">Data Formatting:</h3>
-          <ul className="list-disc list-inside pl-4 space-y-1">
-            <li>
-              <strong>Date:</strong> Accepted formats include <code className="bg-muted px-1 py-0.5 rounded">YYYY-MM-DD</code> (e.g., 2023-12-31), <code className="bg-muted px-1 py-0.5 rounded">MM/DD/YYYY</code> (e.g., 12/31/2023), <code className="bg-muted px-1 py-0.5 rounded">DD/MM/YYYY</code> (e.g., 31/12/2023), or <code className="bg-muted px-1 py-0.5 rounded">YYYY/MM/DD</code> (e.g., 2023/12/31).
-            </li>
-            <li>
-              <strong>Category:</strong> Must be one of the following predefined categories: {validCategoriesString}.
-            </li>
-            <li>
-              <strong>Amount:</strong> Should be a number (e.g., 25.99). Do not include currency symbols.
-            </li>
-            <li>
-              <strong>Description:</strong> Should be plain text. If your description contains commas, ensure it is enclosed in double quotes (e.g., <code className="bg-muted px-1 py-0.5 rounded">"Lunch, with friends"</code>).
-            </li>
+          <ul className="list-disc list-inside pl-2 space-y-1 text-xs">
+            <li><code className="bg-muted px-1 py-0.5 rounded text-[10px]">Date</code> — expense date</li>
+            <li><code className="bg-muted px-1 py-0.5 rounded text-[10px]">Category</code> — must be one of: {validCategoriesString}</li>
+            <li><code className="bg-muted px-1 py-0.5 rounded text-[10px]">Description</code> — brief text</li>
+            <li><code className="bg-muted px-1 py-0.5 rounded text-[10px]">Amount</code> — positive number, no currency symbol</li>
           </ul>
 
-          <h3 className="font-semibold text-md mt-3 text-primary">Example CSV Content:</h3>
-          <div className="overflow-x-auto rounded-md border">
+          <h3 className="font-semibold text-sm mt-2">Date Formats</h3>
+          <p className="text-xs">Accepted: <code className="bg-muted px-1 rounded text-[10px]">YYYY-MM-DD</code>, <code className="bg-muted px-1 rounded text-[10px]">MM/DD/YYYY</code>, <code className="bg-muted px-1 rounded text-[10px]">DD/MM/YYYY</code></p>
+
+          <h3 className="font-semibold text-sm mt-2">Example</h3>
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs">Category</TableHead>
+                  <TableHead className="text-xs">Description</TableHead>
+                  <TableHead className="text-xs">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell>2023-01-15</TableCell>
-                  <TableCell>Food</TableCell>
-                  <TableCell>Groceries</TableCell>
-                  <TableCell>55.20</TableCell>
+                  <TableCell className="text-xs">2023-01-15</TableCell>
+                  <TableCell className="text-xs">Food</TableCell>
+                  <TableCell className="text-xs">Groceries</TableCell>
+                  <TableCell className="text-xs">55.20</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>01/20/2023</TableCell>
-                  <TableCell>Transportation</TableCell>
-                  <TableCell>Bus fare</TableCell>
-                  <TableCell>2.75</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>2023-02-01</TableCell>
-                  <TableCell>Shopping</TableCell>
-                  <TableCell>"New headphones, blue"</TableCell>
-                  <TableCell>129.99</TableCell>
+                  <TableCell className="text-xs">01/20/2023</TableCell>
+                  <TableCell className="text-xs">Transportation</TableCell>
+                  <TableCell className="text-xs">Bus fare</TableCell>
+                  <TableCell className="text-xs">2.75</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Rows with invalid data (e.g., incorrect category, invalid date format, non-positive amount) will be skipped during import.
+          <p className="text-[10px] text-muted-foreground">
+            Invalid rows will be skipped during import.
           </p>
         </div>
-        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
+
+        <DialogFooter className="p-5 pt-3 border-t flex-shrink-0">
           <DialogClose asChild>
-            <Button type="button" variant="outline">Close</Button>
+            <Button type="button" variant="outline" className="h-10 w-full">Close</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
